@@ -1,0 +1,21 @@
+{
+  "name": "@profy/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generated TypeScript client for the Profy Skill Academy API (web + admin). Source of truth: backend/api/openapi.yaml",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../backend/api/openapi.yaml -o src/schema.d.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.5"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.1",
+    "typescript": "^5.8.0"
+  }
+}

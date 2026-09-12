@@ -1,0 +1,12 @@
+# Lint config for backend/api/openapi.yaml — `npx @redocly/cli lint` must pass
+# clean (Milestone 0 DoD). Used by CI and developers alike.
+extends:
+  - recommended
+rules:
+  # Public read endpoints and infra probes (healthz, taxonomy tree, featured,
+  # config) legitimately have no client-error responses; the spec adds 4XX
+  # responses individually wherever one exists.
+  operation-4xx-response: off
+  # The spec intentionally documents the local dev server (docker compose);
+  # prod servers are added at deploy time (Milestone 10).
+  no-server-example.com: off

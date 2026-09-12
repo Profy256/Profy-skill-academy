@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/profy}
+    username: ${DATABASE_USERNAME:profy}
+    password: ${DATABASE_PASSWORD:profy}
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379/0}
+
+profy:
+  jwt-secret: ${JWT_SECRET:dev-only-insecure-secret-change-me}
+  ai-base-url: ${AI_BASE_URL:https://openrouter.ai/api/v1}
+  ai-api-key: ${AI_API_KEY:}
+  ai-model: ${AI_MODEL:openai/gpt-4o-mini}

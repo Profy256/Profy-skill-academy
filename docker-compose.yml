@@ -1,0 +1,89 @@
+# Local development stack (TECHNICAL_DOC §8).
+#   docker compose up --build   -> postgres, redis, api (migrate-on-start), worker, web, admin
+# Secrets come from the shell environment or root .env; dev-only defaults are
+# provided so `docker compose up` works with zero configuration.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: profy
+      POSTGRES_PASSWORD: profy
+      POSTGRES_DB: profy
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profy -d profy"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    command: ["java", "-jar", "/home/appuser/app.jar"]
+    environment:
+      PORT: 8080
+      SPRING_PROFILES_ACTIVE: local
+      DATABASE_URL: jdbc:postgresql://postgres:5432/profy
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
+      AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+    command: ["java", "-jar", "/home/appuser/app.jar", "--spring.profiles.active=worker"]
+    environment:
+      SPRING_PROFILES_ACTIVE: worker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/profy
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - "3002:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8080
+    depends_on:
+      - api
+
+  admin:
+    build:
+      context: ./apps/admin
+    ports:
+      - "3003:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8080
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

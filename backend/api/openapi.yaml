@@ -1,0 +1,1980 @@
+openapi: 3.1.0
+info:
+  title: Profy Skill Academy API
+  version: 0.1.0
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+  description: |
+    REST API for the Profy Skill Academy learning platform (TECHNICAL_DOC §5).
+
+    * Consumer endpoints (mobile + web share them) accept a JWT with audience
+      `consumer`. Admin endpoints live under `/api/v1/admin/*` and accept a JWT
+      with audience `admin`. The two token types are never interchangeable.
+    * Errors use the envelope `{"error": {"code": string, "message": string}}`
+      with stable machine codes (`ai_unavailable`, `rate_limited`, ...).
+    * Clients send an `X-App-Version` header; the API can force-update later.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development (docker compose)
+
+tags:
+  - name: health
+    description: Infrastructure probes
+  - name: auth
+    description: Consumer authentication (mobile + web)
+  - name: taxonomy
+    description: Public category/course tree (Phase-1 only, server-side filtered)
+  - name: lessons
+    description: Public course + lesson content
+  - name: search
+    description: Discovery
+  - name: ai
+    description: AI Teacher (grounded chat)
+  - name: progress
+    description: Lesson progress, library, quiz attempts
+  - name: billing
+    description: Subscriptions & entitlement
+  - name: admin-auth
+    description: Administrator authentication
+  - name: admin
+    description: Curator CRUD + review dashboard
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe for uptime monitoring
+      operationId: health
+      security: []
+      responses:
+        "200":
+          description: API process is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  # ---------------------------------------------------------------- consumer auth
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Create a consumer account
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created; token pair returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in and receive a token pair
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Token pair issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Rotate the refresh token (reuse detection revokes the family)
+      operationId: refresh
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the refresh token
+      operationId: logout
+      security:
+        - consumerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ------------------------------------------------------------ public taxonomy
+  /api/v1/taxonomy/tree:
+    get:
+      tags: [taxonomy]
+      summary: Full Phase-1 tree (Phase-2 nodes are never serialized)
+      operationId: taxonomyTree
+      security: []
+      parameters:
+        - name: phase
+          in: query
+          schema:
+            type: integer
+            enum: [1]
+          description: Reserved; the server always filters to phase=1.
+      responses:
+        "200":
+          description: Recursive tree of Phase-1 nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaxonomyNode"
+
+  /api/v1/taxonomy/nodes/{slug}:
+    get:
+      tags: [taxonomy]
+      summary: One node with children and breadcrumb
+      operationId: taxonomyNode
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Node detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ----------------------------------------------------------------- discovery
+  /api/v1/search:
+    get:
+      tags: [search]
+      summary: Search courses and lessons by name/description
+      operationId: search
+      security: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching courses and lessons (cursor-paginated)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/home/featured:
+    get:
+      tags: [search]
+      summary: Featured skills carousel + Phase-1 category grid
+      operationId: featuredHome
+      security: []
+      responses:
+        "200":
+          description: Home screen payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturedHome"
+
+  /api/v1/config:
+    get:
+      tags: [search]
+      summary: Client configuration (ads placement/frequency, app flags)
+      operationId: appConfig
+      security: []
+      responses:
+        "200":
+          description: Server-driven config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigResponse"
+
+  # ------------------------------------------------------------ public lessons
+  /api/v1/courses/{slug}:
+    get:
+      tags: [lessons]
+      summary: Course detail with lessons grouped by level
+      operationId: courseDetail
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Course and its published lessons
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CourseDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/lessons/{slug}:
+    get:
+      tags: [lessons]
+      summary: Full lesson (all AI-scope fields + primary video + alternates)
+      operationId: lessonDetail
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lesson content; drafts are never returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ------------------------------------------------------------------ AI Teacher
+  /api/v1/lessons/{id}/ai/chat:
+    post:
+      tags: [ai]
+      summary: Ask the AI Teacher about this lesson (session auto-created)
+      operationId: aiChat
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AIChatRequest"
+      responses:
+        "200":
+          description: Grounded reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIChatResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/AIUnavailable"
+
+  /api/v1/lessons/{id}/ai/messages:
+    get:
+      tags: [ai]
+      summary: Chat history for this lesson (capped at 10 turns in prompts)
+      operationId: aiMessages
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatHistory"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ------------------------------------------------------- progress & library
+  /api/v1/lessons/{id}/progress:
+    put:
+      tags: [progress]
+      summary: Update lesson progress (course completion is derived)
+      operationId: updateProgress
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressRequest"
+      responses:
+        "204":
+          description: Saved
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/progress/continue:
+    get:
+      tags: [progress]
+      summary: Continue-learning shortcut (most recent in-progress lessons)
+      operationId: continueLearning
+      security:
+        - consumerAuth: []
+      responses:
+        "200":
+          description: Recent lessons to resume
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContinueLearningResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/library/bookmarks:
+    get:
+      tags: [progress]
+      summary: List bookmarks
+      operationId: listBookmarks
+      security:
+        - consumerAuth: []
+      responses:
+        "200":
+          description: Bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookmarkList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/library/bookmarks/{lessonId}:
+    post:
+      tags: [progress]
+      summary: Add a bookmark (idempotent)
+      operationId: addBookmark
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Bookmarked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [progress]
+      summary: Remove a bookmark (idempotent)
+      operationId: removeBookmark
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Removed
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/lessons/{id}/quiz-attempts:
+    post:
+      tags: [progress]
+      summary: Record a quiz attempt (scoring is client-side at MVP)
+      operationId: recordQuizAttempt
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizAttemptRequest"
+      responses:
+        "201":
+          description: Attempt recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAttemptResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/profile/stats:
+    get:
+      tags: [progress]
+      summary: Learner stats for the profile screen
+      operationId: profileStats
+      security:
+        - consumerAuth: []
+      responses:
+        "200":
+          description: Aggregated stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # -------------------------------------------------------------------- billing
+  /api/v1/entitlement:
+    get:
+      tags: [billing]
+      summary: Current entitlement (cached 60s)
+      operationId: entitlement
+      security:
+        - consumerAuth: []
+      responses:
+        "200":
+          description: Premium status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entitlement"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/billing/checkout:
+    post:
+      tags: [billing]
+      summary: Create a Stripe Checkout session (web only)
+      operationId: createCheckout
+      security:
+        - consumerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/billing/stripe-webhook:
+    post:
+      tags: [billing]
+      summary: Stripe webhook (verify via Stripe-Signature; idempotent upserts)
+      operationId: stripeWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Acknowledged
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/billing/revenuecat-webhook:
+    post:
+      tags: [billing]
+      summary: RevenueCat webhook for mobile IAP events (server-to-server)
+      operationId: revenuecatWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Acknowledged
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  # ------------------------------------------------------------------ admin auth
+  /api/v1/admin/auth/login:
+    post:
+      tags: [admin-auth]
+      summary: Admin login (issues JWT with audience `admin`)
+      operationId: adminLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginRequest"
+      responses:
+        "200":
+          description: Admin token pair + profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/admin/auth/refresh:
+    post:
+      tags: [admin-auth]
+      summary: Rotate the admin refresh token
+      operationId: adminRefresh
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New admin token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/auth/logout:
+    post:
+      tags: [admin-auth]
+      summary: Revoke the admin refresh token
+      operationId: adminLogout
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ------------------------------------------------------------ admin taxonomy
+  /api/v1/admin/taxonomy:
+    get:
+      tags: [admin]
+      summary: List all nodes (Phase-2 included — admin sees everything)
+      operationId: adminListTaxonomy
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Flat list of all nodes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaxonomyNode"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [admin]
+      summary: Create a category/subcategory/course node
+      operationId: adminCreateTaxonomyNode
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxonomyNode"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Slug already exists or cycle/depth guard failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/admin/taxonomy/reorder:
+    post:
+      tags: [admin]
+      summary: Reorder siblings (sort_order batch update)
+      operationId: adminReorderTaxonomy
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderRequest"
+      responses:
+        "204":
+          description: Reordered
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/taxonomy/{id}:
+    get:
+      tags: [admin]
+      summary: Get one node (with children)
+      operationId: adminGetTaxonomyNode
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Node
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxonomyNode"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [admin]
+      summary: Update a node (name, slug, description, phase, active, sort)
+      operationId: adminUpdateTaxonomyNode
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxonomyNode"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Slug conflict or cycle guard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags: [admin]
+      summary: Delete a node (fails if it has children or lessons)
+      operationId: adminDeleteTaxonomyNode
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # -------------------------------------------------------------- admin lessons
+  /api/v1/admin/lessons:
+    get:
+      tags: [admin]
+      summary: List lessons (drafts included)
+      operationId: adminListLessons
+      security:
+        - adminAuth: []
+      parameters:
+        - name: node_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lessons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminLesson"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [admin]
+      summary: Create a lesson
+      operationId: adminCreateLesson
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLesson"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/lessons/{id}:
+    get:
+      tags: [admin]
+      summary: Get a lesson with its videos
+      operationId: adminGetLesson
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lesson
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLesson"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [admin]
+      summary: Update a lesson (all content fields incl. quizzes)
+      operationId: adminUpdateLesson
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLesson"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [admin]
+      summary: Delete a lesson
+      operationId: adminDeleteLesson
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/lessons/{id}/videos:
+    get:
+      tags: [admin]
+      summary: List video candidates for a lesson
+      operationId: adminListVideos
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VideoCandidate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [admin]
+      summary: Attach a curated YouTube video (URL pasted → validated)
+      operationId: adminAddVideo
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoInput"
+      responses:
+        "201":
+          description: Attached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoCandidate"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/lessons/{id}/videos/{videoId}:
+    put:
+      tags: [admin]
+      summary: Update video status, primary/alternate flags, review date, notes
+      operationId: adminUpdateVideo
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoCandidate"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [admin]
+      summary: Detach a video
+      operationId: adminDeleteVideo
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Detached
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ------------------------------------------------------ review & audit (admin)
+  /api/v1/admin/review/videos:
+    get:
+      tags: [admin]
+      summary: Review queue — flagged/unavailable videos with last check result
+      operationId: adminReviewVideos
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReviewVideoItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/audit-log:
+    get:
+      tags: [admin]
+      summary: Audit trail of admin writes
+      operationId: adminAuditLog
+      security:
+        - adminAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit entries (newest first)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    consumerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Consumer JWT with audience `consumer` (15 min).
+    adminAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Admin JWT with audience `admin` (15 min). Never interchangeable with consumer tokens.
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid/expired token, or token audience mismatch
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found (or invisible to this audience)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Invalid request body/parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: "Too many requests (auth: IP-based; AI chat: per-user daily)"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    AIUnavailable:
+      description: "AI Teacher degraded - lesson content stays fully usable"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable machine code, e.g. ai_unavailable, rate_limited.
+            message:
+              type: string
+
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        service:
+          type: string
+        version:
+          type: string
+        uptime_seconds:
+          type: integer
+        checks:
+          type: object
+          properties:
+            postgres:
+              type: boolean
+            redis:
+              type: boolean
+
+    # ---------------------------------------------------------------- auth
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+          minLength: 1
+        device:
+          type: string
+          enum: [mobile, web]
+          default: web
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        device:
+          type: string
+          enum: [mobile, web]
+          default: web
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          description: Access token lifetime in seconds (900).
+
+    # ------------------------------------------------------------- taxonomy
+    TaxonomyNode:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+        node_type:
+          type: string
+          enum: [category, subcategory, course]
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: [string, "null"]
+        icon:
+          type: [string, "null"]
+        phase:
+          type: integer
+          enum: [1, 2]
+        is_active:
+          type: boolean
+        sort_order:
+          type: integer
+        depth:
+          type: integer
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxonomyNode"
+
+    NodeDetail:
+      allOf:
+        - $ref: "#/components/schemas/TaxonomyNode"
+        - type: object
+          properties:
+            breadcrumb:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  slug:
+                    type: string
+
+    TaxonomyCreateRequest:
+      type: object
+      required: [node_type, name, slug]
+      properties:
+        parent_id:
+          type: [string, "null"]
+          format: uuid
+        node_type:
+          type: string
+          enum: [category, subcategory, course]
+        name:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        description:
+          type: string
+        icon:
+          type: string
+        phase:
+          type: integer
+          enum: [1, 2]
+          default: 1
+        is_active:
+          type: boolean
+          default: true
+        sort_order:
+          type: integer
+          default: 0
+
+    TaxonomyUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        description:
+          type: [string, "null"]
+        icon:
+          type: [string, "null"]
+        phase:
+          type: integer
+          enum: [1, 2]
+        is_active:
+          type: boolean
+        sort_order:
+          type: integer
+
+    ReorderRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, sort_order]
+            properties:
+              id:
+                type: string
+                format: uuid
+              sort_order:
+                type: integer
+
+    # -------------------------------------------------------------- content
+    CourseSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: [string, "null"]
+        icon:
+          type: [string, "null"]
+        lesson_count:
+          type: integer
+        levels:
+          type: array
+          items:
+            type: string
+            enum: [beginner, intermediate, advanced]
+
+    CourseDetail:
+      allOf:
+        - $ref: "#/components/schemas/CourseSummary"
+        - type: object
+          properties:
+            lessons:
+              type: array
+              items:
+                $ref: "#/components/schemas/LessonSummary"
+
+    LessonSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        level:
+          type: [string, "null"]
+          enum: [beginner, intermediate, advanced]
+        sort_order:
+          type: integer
+
+    LessonDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: [string, "null"]
+        explanation:
+          type: [string, "null"]
+        objectives:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
+        exercises:
+          type: array
+          items:
+            type: string
+        quizzes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quiz"
+        level:
+          type: [string, "null"]
+          enum: [beginner, intermediate, advanced]
+        video:
+          $ref: "#/components/schemas/LessonVideo"
+        alternates:
+          type: array
+          items:
+            $ref: "#/components/schemas/LessonVideo"
+
+    LessonVideo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        youtube_video_id:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{11}$"
+        title:
+          type: string
+        channel:
+          type: [string, "null"]
+        is_primary:
+          type: boolean
+
+    Quiz:
+      type: object
+      required: [question, options, answer_index]
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          minItems: 2
+          items:
+            type: string
+        answer_index:
+          type: integer
+          minimum: 0
+
+    # ------------------------------------------------------------ discovery
+    SearchResult:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [course, lesson]
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: [string, "null"]
+        course_slug:
+          type: [string, "null"]
+        lesson_count:
+          type: [integer, "null"]
+
+    SearchResults:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+        next_cursor:
+          type: [string, "null"]
+
+    FeaturedHome:
+      type: object
+      properties:
+        featured:
+          type: array
+          items:
+            $ref: "#/components/schemas/CourseSummary"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxonomyNode"
+
+    AdPlacement:
+      type: object
+      properties:
+        placement_id:
+          type: string
+          enum: [home_banner, lesson_banner, lesson_interstitial, library_banner]
+        enabled:
+          type: boolean
+        frequency:
+          type: integer
+          description: Show roughly once every N screens/sessions.
+
+    ConfigResponse:
+      type: object
+      properties:
+        ads:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            placements:
+              type: array
+              items:
+                $ref: "#/components/schemas/AdPlacement"
+        app:
+          type: object
+          properties:
+            min_version:
+              type: [string, "null"]
+            force_update:
+              type: boolean
+              default: false
+
+    # ------------------------------------------------------------------- AI
+    AIChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+
+    AIChatResponse:
+      type: object
+      required: [reply]
+      properties:
+        reply:
+          type: string
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ChatHistory:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+
+    # ------------------------------------------------------------- progress
+    ProgressRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [in_progress, completed]
+
+    ContinueLearningItem:
+      type: object
+      properties:
+        lesson:
+          $ref: "#/components/schemas/LessonSummary"
+        course_slug:
+          type: string
+        course_name:
+          type: string
+        status:
+          type: string
+          enum: [in_progress, completed]
+        updated_at:
+          type: string
+          format: date-time
+
+    ContinueLearningResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContinueLearningItem"
+
+    Bookmark:
+      type: object
+      properties:
+        lesson_id:
+          type: string
+          format: uuid
+        lesson_title:
+          type: string
+        course_slug:
+          type: string
+        course_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    BookmarkList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bookmark"
+
+    QuizAttemptRequest:
+      type: object
+      required: [score, total]
+      properties:
+        score:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 1
+
+    QuizAttemptResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        score:
+          type: integer
+        total:
+          type: integer
+        passed:
+          type: boolean
+        attempt_number:
+          type: integer
+
+    ProfileStats:
+      type: object
+      properties:
+        courses_completed:
+          type: integer
+        lessons_completed:
+          type: integer
+        lessons_in_progress:
+          type: integer
+        bookmarks_count:
+          type: integer
+        quizzes_taken:
+          type: integer
+        avg_quiz_score:
+          type: [number, "null"]
+
+    # -------------------------------------------------------------- billing
+    Entitlement:
+      type: object
+      properties:
+        is_premium:
+          type: boolean
+        plan:
+          type: [string, "null"]
+          enum: [monthly, yearly]
+        current_period_end:
+          type: [string, "null"]
+          format: date-time
+
+    CheckoutRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan:
+          type: string
+          enum: [monthly, yearly]
+        success_url:
+          type: string
+        cancel_url:
+          type: string
+
+    CheckoutResponse:
+      type: object
+      properties:
+        checkout_url:
+          type: string
+        session_id:
+          type: string
+
+    # ----------------------------------------------------------- admin auth
+    AdminLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin]
+
+    AdminLoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+        admin_user:
+          $ref: "#/components/schemas/AdminUser"
+
+    # ------------------------------------------------------- admin content
+    LessonInput:
+      type: object
+      required: [node_id, title, slug]
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        description:
+          type: string
+        explanation:
+          type: string
+        objectives:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
+        exercises:
+          type: array
+          items:
+            type: string
+        quizzes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quiz"
+        level:
+          type: [string, "null"]
+          enum: [beginner, intermediate, advanced]
+        status:
+          type: string
+          enum: [draft, published]
+          default: draft
+        sort_order:
+          type: integer
+          default: 0
+
+    AdminLesson:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        node_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: [string, "null"]
+        explanation:
+          type: [string, "null"]
+        objectives:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
+        exercises:
+          type: array
+          items:
+            type: string
+        quizzes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quiz"
+        level:
+          type: [string, "null"]
+          enum: [beginner, intermediate, advanced]
+        status:
+          type: string
+          enum: [draft, published]
+        sort_order:
+          type: integer
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        videos:
+          type: array
+          items:
+            $ref: "#/components/schemas/VideoCandidate"
+
+    VideoInput:
+      type: object
+      properties:
+        youtube_url:
+          type: string
+          description: Full YouTube URL; the ID is extracted and validated server-side.
+        youtube_video_id:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{11}$"
+        title:
+          type: string
+        channel:
+          type: string
+        is_primary:
+          type: boolean
+        curator_status:
+          type: string
+          enum: [pending, approved, flagged, unavailable]
+        date_reviewed:
+          type: [string, "null"]
+          format: date
+        notes:
+          type: string
+
+    VideoCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        youtube_video_id:
+          type: string
+        title:
+          type: string
+        channel:
+          type: [string, "null"]
+        is_primary:
+          type: boolean
+        curator_status:
+          type: string
+          enum: [pending, approved, flagged, unavailable]
+        date_reviewed:
+          type: [string, "null"]
+          format: date
+        notes:
+          type: [string, "null"]
+        added_by:
+          type: string
+          format: uuid
+
+    ReviewVideoItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        lesson_title:
+          type: string
+        youtube_video_id:
+          type: string
+        title:
+          type: string
+        channel:
+          type: [string, "null"]
+        curator_status:
+          type: string
+          enum: [flagged, unavailable]
+        notes:
+          type: [string, "null"]
+        last_checked_at:
+          type: [string, "null"]
+          format: date-time
+        is_available:
+          type: [boolean, "null"]
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        admin_user_id:
+          type: string
+          format: uuid
+        admin_email:
+          type: string
+        action:
+          type: string
+        entity:
+          type: string
+        entity_id:
+          type: [string, "null"]
+          format: uuid
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    AuditLogPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        next_cursor:
+          type: [string, "null"]

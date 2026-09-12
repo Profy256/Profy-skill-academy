@@ -1,0 +1,30 @@
+# Secrets / local env
+.env
+.env.local
+.env.*.local
+
+# Java / Maven
+backend/target/
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Node (web + admin + api-client)
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Flutter (apps/mobile)
+.dart_tool/
+build/
+*.g.dart
+*.freezed.dart
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
