@@ -26,6 +26,9 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > from TECHNICAL_DOC §4 schemas. Module stubs (controllers + services) for all 8 modules.
 > Remaining for M0: compile + boot + `/healthz` 200, TS client gen, CI workflow, seed script.
 >
+> **Session note (2026-09-12):** Project pushed to GitHub: https://github.com/Profy256/Profy-skill-academy.git
+> README.md added with project overview, tech stack, and detailed setup instructions.
+>
 > **Session note (2026-09-11):** M1-M4 backend modules fully implemented (71 Java files, compiles clean).
 > **M1 Auth:** User/AdminUser/RefreshToken entities, AuthService + AdminAuthService (register/login/refresh/logout with
 > rotation + revocation), SHA-256 token hashing, JwtTokenProvider with audience separation.
@@ -39,6 +42,10 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > course completion derivation, continue-learning, bookmarks CRUD, quiz attempt recording (70%
 > threshold), profile stats aggregation.
 > Remaining: error handling polish, unit tests for M1-M4, M0 seed/CI, M6-M10.
+>
+> **Session note (2026-09-12):** README.md created with full project docs, tech stack, setup instructions
+> (Docker quick start + individual service run guides for backend, web, admin, mobile). Project pushed
+> to GitHub: https://github.com/Profy256/Profy-skill-academy.git
 
 ---
 
