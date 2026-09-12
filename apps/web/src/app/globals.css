@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Light palette ──────────────────────────────────────────────────────── */
+:root {
+  --background: #fbf7f2;
+  --foreground: #2d2b28;
+  --muted-foreground: #7a7570;
+  --card: #efe5da;
+  --surface: #fbf7f2;
+  --border: #d9cebc;
+  --primary: #c66f5b;
+  --on-primary: #fbf7f2;
+  --secondary: #6e84a0;
+  --on-secondary: #fbf7f2;
+  --success: #7a9e7e;
+  --tech: #6e84a0;
+  --business: #c66f5b;
+  --languages: #7a9e7e;
+  --code-bg: #2d2b28;
+  --code-fg: #efe5da;
+  --shadow-color: 45 43 40;
+  --shadow-opacity: 0.08;
+  --scrollbar: #d9cebc;
+  --font-sans: var(--font-source-sans), system-ui, sans-serif;
+  --font-serif: var(--font-lora), Georgia, serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+}
+
+/* ── Dark palette ───────────────────────────────────────────────────────── */
+.dark {
+  --background: #1c1917;
+  --foreground: #f0ebe3;
+  --muted-foreground: #a8a29e;
+  --card: #292422;
+  --surface: #252021;
+  --border: #3f3833;
+  --primary: #d98a70;
+  --on-primary: #241a15;
+  --secondary: #8aa2c0;
+  --on-secondary: #131a22;
+  --success: #93b493;
+  --tech: #8aa2c0;
+  --business: #d98a70;
+  --languages: #93b493;
+  --code-bg: #141110;
+  --code-fg: #e8e2d8;
+  --shadow-color: 0 0 0;
+  --shadow-opacity: 0.5;
+  --scrollbar: #3f3833;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-secondary: var(--secondary);
+  --color-on-secondary: var(--on-secondary);
+  --color-success: var(--success);
+  --color-tech: var(--tech);
+  --color-business: var(--business);
+  --color-languages: var(--languages);
+  --color-code: var(--code-bg);
+  --color-code-fg: var(--code-fg);
+  --font-sans: var(--font-source-sans), system-ui, sans-serif;
+  --font-serif: var(--font-lora), Georgia, serif;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@utility shadow-card {
+  box-shadow: 0 1px 3px rgb(var(--shadow-color) / var(--shadow-opacity));
+}
+
+@utility shadow-card-lg {
+  box-shadow: 0 1px 4px rgb(var(--shadow-color) / var(--shadow-opacity));
+}

@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@custom-variant light (&:where(.light, .light *));
+
+/* ── Dark palette (default — the design's night CMS look) ──────────────── */
+:root {
+  --bg: #141414; /* content backdrop */
+  --panel: #1b1b1b; /* cards / panels (light: #fff) */
+  --panel-2: #232323; /* inputs (light: #fafaf9) */
+  --panel-3: #1f1f1f; /* subtle bg (light: #f9fafb) */
+  --hover: #1f1f1f; /* row hover (light: #fafaf9) */
+  --border: #2a2a2a; /* rules (light: #e5e4e0) */
+  --border-faint: #232323; /* row separators (light: #f3f4f6) */
+  --text: #e8e8e8; /* primary (light: #111) */
+  --text-2: #b8b8b8; /* secondary (light: #374151) */
+  --text-3: #8f8f8f; /* muted (light: #9ca3af) */
+  --text-faint: #565656; /* faint (light: #d1d5db) */
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-soft: rgba(245, 158, 11, 0.09); /* selected rows (light: #fffbeb) */
+  --accent-soft-border: rgba(245, 158, 11, 0.35); /* (light: #fde68a) */
+  --accent-soft-text: #fbbf24; /* (light: #92400e) */
+  --accent-note: #d97706; /* warning notes (light: #b45309) */
+  --btn-strong: #e5e5e5; /* strong neutral button (light: #111) */
+  --btn-strong-fg: #111111; /* (light: #fff) */
+  --btn-strong-hover: #ffffff; /* (light: #1f2937) */
+  --ok: #34d399; /* saved/confirm (light: #059669) */
+  --danger: #f87171; /* (light: #ef4444) */
+  --danger-soft: rgba(239, 68, 68, 0.12); /* (light: #fef2f2) */
+  --badge-success-bg: rgba(16, 185, 129, 0.15);
+  --badge-success-text: #34d399;
+  --badge-warning-bg: rgba(245, 158, 11, 0.15);
+  --badge-warning-text: #fbbf24;
+  --badge-danger-bg: rgba(239, 68, 68, 0.15);
+  --badge-danger-text: #f87171;
+  --badge-info-bg: rgba(99, 102, 241, 0.18);
+  --badge-info-text: #a5b4fc;
+  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
+  --badge-neutral-text: #d4d4d4;
+  --focus-glow: rgba(245, 158, 11, 0.15);
+  --scrollbar-thumb: #2a2a2a;
+}
+
+/* ── Light palette (the design's original daytime look) ────────────────── */
+.light {
+  --bg: #f2f1ee;
+  --panel: #ffffff;
+  --panel-2: #fafaf9;
+  --panel-3: #f9fafb;
+  --hover: #fafaf9;
+  --border: #e5e4e0;
+  --border-faint: #f3f4f6;
+  --text: #111111;
+  --text-2: #374151;
+  --text-3: #9ca3af;
+  --text-faint: #d1d5db;
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-soft: #fffbeb;
+  --accent-soft-border: #fde68a;
+  --accent-soft-text: #92400e;
+  --accent-note: #b45309;
+  --btn-strong: #111111;
+  --btn-strong-fg: #ffffff;
+  --btn-strong-hover: #1f2937;
+  --ok: #059669;
+  --danger: #ef4444;
+  --danger-soft: #fef2f2;
+  --badge-success-bg: #d1fae5;
+  --badge-success-text: #065f46;
+  --badge-warning-bg: #fef3c7;
+  --badge-warning-text: #92400e;
+  --badge-danger-bg: #fee2e2;
+  --badge-danger-text: #991b1b;
+  --badge-info-bg: #e0e7ff;
+  --badge-info-text: #3730a3;
+  --badge-neutral-bg: #f3f4f6;
+  --badge-neutral-text: #374151;
+  --focus-glow: rgba(245, 158, 11, 0.08);
+  --scrollbar-thumb: #d4d3d0;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+/* Scrollbars: thin, only visible on hover */
+.scrollable {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.scrollable::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollable::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
+
+/* Dark scrollbar for the (always-dark) sidebar */
+.scrollable-dark {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+.scrollable-dark::-webkit-scrollbar {
+  width: 3px;
+}
+.scrollable-dark::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 2px;
+}
