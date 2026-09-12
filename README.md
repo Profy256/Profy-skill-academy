@@ -86,13 +86,140 @@ Copy `.env.example` to `.env` and configure:
 - `STRIPE_WEBHOOK_SECRET` — Stripe webhook verification
 - `REVENUECAT_WEBHOOK_AUTH` — RevenueCat webhook auth
 
-## API
+---
 
-The backend exposes a REST API on port 8080 (8082 externally in Docker). Documentation is available at:
+## Running Individual Services
+
+### Backend (Spring Boot API)
+
+**Prerequisites:** Java 17+, Maven, PostgreSQL, Redis
+
+```bash
+# Start only the database services
+docker compose up -d postgres redis
+
+# Run the API server
+cd backend
+./mvnw spring-boot:run
+
+# Or build the JAR and run
+./mvnw clean package -DskipTests
+java -jar target/profy-skill-academy-0.1.0.jar
+```
+
+API runs on `http://localhost:8080` by default.
+
+**Run tests:**
+
+```bash
+cd backend
+./mvnw test
+```
+
+---
+
+### Consumer Web App (Next.js)
+
+**Prerequisites:** Node.js 18+
+
+```bash
+cd apps/web
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+Web app runs on `http://localhost:3000`.
+
+**Build for production:**
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+### Admin Panel (Next.js)
+
+**Prerequisites:** Node.js 18+
+
+```bash
+cd apps/admin
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+Admin panel runs on `http://localhost:3000` (use a different port if web is also running).
+
+**Build for production:**
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+### Mobile App (Flutter)
+
+**Prerequisites:** Flutter SDK 3.13+, Android Studio or Xcode
+
+```bash
+cd apps/mobile
+
+# Install dependencies
+flutter pub get
+
+# Check for any issues
+flutter doctor
+
+# Run on connected device or emulator
+flutter run
+
+# Run on specific platform
+flutter run -d android
+flutter run -d ios
+flutter run -d chrome
+```
+
+**Build release versions:**
+
+```bash
+# Android APK
+flutter build apk
+
+# Android App Bundle (for Play Store)
+flutter build appbundle
+
+# iOS (requires macOS + Xcode)
+flutter build ios
+```
+
+**Run tests:**
+
+```bash
+flutter test
+```
+
+---
+
+## API Documentation
+
+The backend exposes a REST API. Documentation is available at:
 
 ```
-http://localhost:8082/redoc
+http://localhost:8080/redoc
 ```
+
+OpenAPI spec is located at `backend/api/openapi.yaml`.
 
 ## License
 
