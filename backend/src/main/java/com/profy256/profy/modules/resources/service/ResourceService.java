@@ -29,6 +29,32 @@ public class ResourceService {
         return resources.stream().map(this::resourceToMap).collect(Collectors.toList());
     }
 
+    public List<Map<String, Object>> listAllWithTaxonomy() {
+        List<Resource> resources = resourceRepository.findByIsActiveTrue();
+        return resources.stream().map(r -> {
+            Map<String, Object> map = resourceToMap(r);
+            // Enrich with taxonomy context
+            var courseNode = taxonomyNodeRepository.findById(r.getNodeId()).orElse(null);
+            if (courseNode != null) {
+                map.put("courseName", courseNode.getName());
+                map.put("courseSlug", courseNode.getSlug());
+                // Walk up to find category
+                UUID parentId = courseNode.getParentId();
+                while (parentId != null) {
+                    var parentNode = taxonomyNodeRepository.findById(parentId).orElse(null);
+                    if (parentNode == null) break;
+                    if (parentNode.getDepth() == 0) {
+                        map.put("categoryName", parentNode.getName());
+                        map.put("categorySlug", parentNode.getSlug());
+                        break;
+                    }
+                    parentId = parentNode.getParentId();
+                }
+            }
+            return map;
+        }).collect(Collectors.toList());
+    }
+
     public List<Map<String, Object>> listByNodeId(UUID nodeId) {
         List<Resource> resources = resourceRepository.findByNodeIdAndIsActiveTrue(nodeId);
         return resources.stream().map(this::resourceToMap).collect(Collectors.toList());

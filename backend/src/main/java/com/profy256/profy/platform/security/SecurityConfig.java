@@ -35,6 +35,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/home/**").permitAll()
                 .requestMatchers("/api/v1/courses/**").permitAll()
                 .requestMatchers("/api/v1/lessons/*/ai/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/v1/resources/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/lessons/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()

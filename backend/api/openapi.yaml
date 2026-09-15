@@ -1097,7 +1097,10 @@ paths:
   /api/v1/admin/review/videos:
     get:
       tags: [admin]
-      summary: Review queue — flagged/unavailable videos with last check result
+      summary: Review queue — flagged/unavailable videos, plus auto-sourced videos pending review
+      description: |
+        Includes pending `source=auto` videos (auto-curation outputs awaiting review)
+        in addition to flagged/unavailable curated videos. Items carry `lessonTitle`.
       operationId: adminReviewVideos
       security:
         - adminAuth: []
@@ -1110,6 +1113,29 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ReviewVideoItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/report/uncovered-lessons:
+    get:
+      tags: [admin]
+      summary: Coverage report — published lessons with no video at all
+      description: |
+        Lessons auto-curation could not cover (no YOUTUBE_API_KEY, no suitable search
+        result, or created before the feature existed). Use it to decide which lessons
+        need manual curation.
+      operationId: adminUncoveredLessonsReport
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Uncovered lessons (oldest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UncoveredLessonItem"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -1943,6 +1969,27 @@ components:
           format: date
         notes:
           type: string
+
+    UncoveredLessonItem:
+      type: object
+      description: |
+        Published lesson with no video rows at all — auto-curation found nothing (or is
+        disabled). Shown in the admin Coverage report as needing manual curation.
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        courseName:
+          type: string
+          description: Name of the parent course (taxonomy node).
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
 
     VideoCandidate:
       type: object

@@ -18,6 +18,11 @@ public class ResourceController {
         this.resourceService = resourceService;
     }
 
+    @GetMapping("/resources")
+    public ResponseEntity<List<Map<String, Object>>> listAllResources() {
+        return ResponseEntity.ok(resourceService.listAllWithTaxonomy());
+    }
+
     @GetMapping("/courses/{nodeId}/resources")
     public ResponseEntity<List<Map<String, Object>>> getResourcesByCourse(@PathVariable UUID nodeId) {
         return ResponseEntity.ok(resourceService.listByNodeId(nodeId));

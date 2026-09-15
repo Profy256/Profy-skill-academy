@@ -288,6 +288,25 @@ public class LessonsService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Admin coverage report: published lessons with no video rows at all — i.e. lessons
+     * auto-curation could not cover (no API key, no search results) or that were created
+     * before the feature existed. Use this to decide which lessons need manual curation.
+     */
+    public List<Map<String, Object>> getUncoveredLessonsReport() {
+        return lessonRepository.findUncoveredLessonReportRows().stream()
+                .map(row -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", row.id().toString());
+                    map.put("title", row.title());
+                    map.put("slug", row.slug());
+                    map.put("courseName", row.courseName());
+                    map.put("createdAt", row.createdAt() != null ? row.createdAt().toString() : null);
+                    return map;
+                })
+                .collect(Collectors.toList());
+    }
+
     public List<Map<String, Object>> search(String query) {
         if (query == null || query.isBlank()) {
             return Collections.emptyList();
