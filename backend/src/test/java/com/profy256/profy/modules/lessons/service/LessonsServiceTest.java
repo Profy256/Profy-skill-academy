@@ -33,6 +33,8 @@ class LessonsServiceTest {
     private LessonVideoRepository lessonVideoRepository;
     @Mock
     private TaxonomyNodeRepository taxonomyNodeRepository;
+    @Mock
+    private AutoCurationService autoCurationService;
 
     @InjectMocks
     private LessonsService lessonsService;
@@ -85,6 +87,7 @@ class LessonsServiceTest {
         primaryVideo.setTitle("Primary Video");
         primaryVideo.setIsPrimary(true);
         primaryVideo.setCuratorStatus("approved");
+        primaryVideo.setSource("curated");
 
         alternateVideo = new LessonVideo();
         alternateVideo.setId(UUID.randomUUID());
@@ -93,6 +96,7 @@ class LessonsServiceTest {
         alternateVideo.setTitle("Alternate Video");
         alternateVideo.setIsPrimary(false);
         alternateVideo.setCuratorStatus("pending");
+        alternateVideo.setSource("curated");
     }
 
     @Test
@@ -137,8 +141,6 @@ class LessonsServiceTest {
     @Test
     void getLessonBySlug_returnsLessonWithPrimaryVideoAndAlternates() {
         when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
-        when(lessonVideoRepository.findByLessonIdAndIsPrimaryTrue(lessonId))
-                .thenReturn(Optional.of(primaryVideo));
         when(lessonVideoRepository.findByLessonId(lessonId))
                 .thenReturn(List.of(primaryVideo, alternateVideo));
 
@@ -177,14 +179,122 @@ class LessonsServiceTest {
     @Test
     void getLessonBySlug_noPrimaryVideo_returnsNullPrimary() {
         when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
-        when(lessonVideoRepository.findByLessonIdAndIsPrimaryTrue(lessonId))
-                .thenReturn(Optional.empty());
         when(lessonVideoRepository.findByLessonId(lessonId))
                 .thenReturn(List.of(alternateVideo));
 
         Map<String, Object> result = lessonsService.getLessonBySlug("variables");
 
         assertThat(result.get("primaryVideo")).isNull();
+    }
+
+    @Test
+    void getLessonBySlug_noVideosAtAll_triggersAutoCuration() {
+        LessonVideo autoVideo = new LessonVideo();
+        autoVideo.setId(UUID.randomUUID());
+        autoVideo.setLessonId(lessonId);
+        autoVideo.setYoutubeVideoId("auto5678901");
+        autoVideo.setTitle("Auto Video");
+        autoVideo.setIsPrimary(true);
+        autoVideo.setCuratorStatus("pending");
+        autoVideo.setSource("auto");
+
+        when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
+        when(lessonVideoRepository.findByLessonId(lessonId))
+                .thenReturn(Collections.emptyList())      // first read: uncovered
+                .thenReturn(List.of(autoVideo));          // re-read after auto-fill
+        when(autoCurationService.autoCurateForLesson(lessonId)).thenReturn(autoVideo);
+
+        Map<String, Object> result = lessonsService.getLessonBySlug("variables");
+
+        verify(autoCurationService).autoCurateForLesson(lessonId);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> primary = (Map<String, Object>) result.get("primaryVideo");
+        assertThat(primary).isNotNull();
+        assertThat(primary.get("source")).isEqualTo("auto");
+        assertThat(primary.get("youtubeVideoId")).isEqualTo("auto5678901");
+    }
+
+    @Test
+    void getLessonBySlug_noVideos_autocurationFails_servesLessonWithoutVideo() {
+        when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
+        when(lessonVideoRepository.findByLessonId(lessonId))
+                .thenReturn(Collections.emptyList())      // first read: uncovered
+                .thenReturn(Collections.emptyList());     // re-read: still uncovered
+        when(autoCurationService.autoCurateForLesson(lessonId)).thenReturn(null);
+
+        Map<String, Object> result = lessonsService.getLessonBySlug("variables");
+
+        verify(autoCurationService).autoCurateForLesson(lessonId);
+        assertThat(result.get("primaryVideo")).isNull();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> videos = (List<Map<String, Object>>) result.get("videos");
+        assertThat(videos).isEmpty();
+    }
+
+    @Test
+    void getLessonBySlug_autoVideoLosesToCuratedPrimary() {
+        LessonVideo autoVideo = new LessonVideo();
+        autoVideo.setId(UUID.randomUUID());
+        autoVideo.setLessonId(lessonId);
+        autoVideo.setYoutubeVideoId("auto5678901");
+        autoVideo.setTitle("Auto Video");
+        autoVideo.setIsPrimary(true);
+        autoVideo.setCuratorStatus("pending");
+        autoVideo.setSource("auto");
+
+        when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
+        when(lessonVideoRepository.findByLessonId(lessonId))
+                .thenReturn(List.of(primaryVideo, autoVideo));
+
+        Map<String, Object> result = lessonsService.getLessonBySlug("variables");
+
+        verify(autoCurationService, never()).autoCurateForLesson(any());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> primary = (Map<String, Object>) result.get("primaryVideo");
+        assertThat(primary.get("source")).isEqualTo("curated");
+        assertThat(primary.get("youtubeVideoId")).isEqualTo("dQw4w9WgXcQ");
+    }
+
+    @Test
+    void getLessonBySlug_onlyAutoVideo_servedAsPrimary() {
+        LessonVideo autoVideo = new LessonVideo();
+        autoVideo.setId(UUID.randomUUID());
+        autoVideo.setLessonId(lessonId);
+        autoVideo.setYoutubeVideoId("auto5678901");
+        autoVideo.setTitle("Auto Video");
+        autoVideo.setIsPrimary(true);
+        autoVideo.setCuratorStatus("pending");
+        autoVideo.setSource("auto");
+
+        when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
+        when(lessonVideoRepository.findByLessonId(lessonId))
+                .thenReturn(List.of(autoVideo));
+
+        Map<String, Object> result = lessonsService.getLessonBySlug("variables");
+
+        verify(autoCurationService, never()).autoCurateForLesson(any());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> primary = (Map<String, Object>) result.get("primaryVideo");
+        assertThat(primary.get("source")).isEqualTo("auto");
+    }
+
+    @Test
+    void getLessonBySlug_flaggedCuratedPrimary_ignored() {
+        primaryVideo.setCuratorStatus("flagged");
+
+        when(lessonRepository.findBySlug("variables")).thenReturn(Optional.of(publishedLesson));
+        when(lessonVideoRepository.findByLessonId(lessonId))
+                .thenReturn(List.of(primaryVideo));
+
+        Map<String, Object> result = lessonsService.getLessonBySlug("variables");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> primary = (Map<String, Object>) result.get("primaryVideo");
+        assertThat(primary).isNull();
     }
 
     @Test
@@ -250,6 +360,7 @@ class LessonsServiceTest {
         assertThat(result.getChannel()).isEqualTo("Channel Name");
         assertThat(result.getIsPrimary()).isTrue();
         assertThat(result.getCuratorStatus()).isEqualTo("approved");
+        assertThat(result.getSource()).isEqualTo("curated");
         assertThat(result.getAddedBy()).isEqualTo(adminUserId);
     }
 
@@ -321,5 +432,44 @@ class LessonsServiceTest {
         assertThat(results).isEmpty();
 
         verify(lessonRepository, never()).searchByTitleOrDescription(any());
+    }
+
+    @Test
+    void getReviewQueue_enrichesItemsWithLessonTitle() {
+        LessonVideo flagged = new LessonVideo();
+        flagged.setId(UUID.randomUUID());
+        flagged.setLessonId(lessonId);
+        flagged.setYoutubeVideoId("dQw4w9WgXcQ");
+        flagged.setTitle("Flagged Video");
+        flagged.setCuratorStatus("flagged");
+        flagged.setSource("curated");
+
+        when(lessonVideoRepository.findReviewQueue()).thenReturn(List.of(flagged));
+        when(lessonRepository.findById(lessonId)).thenReturn(Optional.of(publishedLesson));
+
+        List<Map<String, Object>> queue = lessonsService.getReviewQueue();
+
+        assertThat(queue).hasSize(1);
+        assertThat(queue.get(0).get("lessonTitle")).isEqualTo("Variables");
+        assertThat(queue.get(0).get("source")).isEqualTo("curated");
+    }
+
+    @Test
+    void getReviewQueue_missingLessonStillReturned_withoutLessonTitle() {
+        LessonVideo orphan = new LessonVideo();
+        orphan.setId(UUID.randomUUID());
+        orphan.setLessonId(lessonId);
+        orphan.setYoutubeVideoId("dQw4w9WgXcQ");
+        orphan.setTitle("Orphan Video");
+        orphan.setCuratorStatus("unavailable");
+        orphan.setSource("curated");
+
+        when(lessonVideoRepository.findReviewQueue()).thenReturn(List.of(orphan));
+        when(lessonRepository.findById(lessonId)).thenReturn(Optional.empty());
+
+        List<Map<String, Object>> queue = lessonsService.getReviewQueue();
+
+        assertThat(queue).hasSize(1);
+        assertThat(queue.get(0).containsKey("lessonTitle")).isFalse();
     }
 }

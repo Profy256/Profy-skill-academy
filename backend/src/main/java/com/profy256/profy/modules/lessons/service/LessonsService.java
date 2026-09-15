@@ -14,6 +14,7 @@ import com.profy256.profy.platform.error.BadRequestException;
 import com.profy256.profy.platform.error.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -27,13 +28,56 @@ public class LessonsService {
     private final LessonRepository lessonRepository;
     private final LessonVideoRepository lessonVideoRepository;
     private final TaxonomyNodeRepository taxonomyNodeRepository;
+    private final AutoCurationService autoCurationService;
 
     public LessonsService(LessonRepository lessonRepository,
                           LessonVideoRepository lessonVideoRepository,
-                          TaxonomyNodeRepository taxonomyNodeRepository) {
+                          TaxonomyNodeRepository taxonomyNodeRepository,
+                          AutoCurationService autoCurationService) {
         this.lessonRepository = lessonRepository;
         this.lessonVideoRepository = lessonVideoRepository;
         this.taxonomyNodeRepository = taxonomyNodeRepository;
+        this.autoCurationService = autoCurationService;
+    }
+
+    public List<Map<String, Object>> listAllLessons(String nodeId) {
+        List<Lesson> lessons;
+        if (nodeId != null && !nodeId.isBlank()) {
+            lessons = lessonRepository.findByNodeId(UUID.fromString(nodeId));
+        } else {
+            lessons = lessonRepository.findAll();
+        }
+        return lessons.stream().map(this::lessonSummaryToMap).collect(Collectors.toList());
+    }
+
+    public Map<String, Object> getLessonById(UUID id) {
+        Lesson lesson = lessonRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+
+        List<LessonVideo> allVideos = lessonVideoRepository.findByLessonId(lesson.getId());
+
+        Map<String, Object> result = lessonToMap(lesson);
+        result.put("videos", allVideos.stream().map(this::videoToMap).collect(Collectors.toList()));
+        return result;
+    }
+
+    public void deleteLesson(UUID id) {
+        Lesson lesson = lessonRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        lessonRepository.delete(lesson);
+    }
+
+    public List<Map<String, Object>> listVideosByLesson(UUID lessonId) {
+        lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+        List<LessonVideo> videos = lessonVideoRepository.findByLessonId(lessonId);
+        return videos.stream().map(this::videoToMap).collect(Collectors.toList());
+    }
+
+    public void deleteVideo(UUID videoId) {
+        LessonVideo video = lessonVideoRepository.findById(videoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Video not found"));
+        lessonVideoRepository.delete(video);
     }
 
     public Map<String, Object> getCourseBySlug(String slug) {
@@ -66,13 +110,72 @@ public class LessonsService {
             throw new ResourceNotFoundException("Lesson not found");
         }
 
-        Optional<LessonVideo> primaryVideoOpt = lessonVideoRepository.findByLessonIdAndIsPrimaryTrue(lesson.getId());
         List<LessonVideo> allVideos = lessonVideoRepository.findByLessonId(lesson.getId());
 
+        // Runtime auto-curation: lessons with no videos at all get an auto-sourced one on first read
+        // (best-effort — on failure we simply serve the lesson without a video).
+        if (allVideos.isEmpty()) {
+            LessonVideo autoVideo = autoCurationService.autoCurateForLesson(lesson.getId());
+            if (autoVideo != null) {
+                allVideos = lessonVideoRepository.findByLessonId(lesson.getId());
+            }
+        }
+
+        LessonVideo primaryVideo = resolvePrimaryVideo(allVideos);
+
         Map<String, Object> result = lessonToMap(lesson);
-        result.put("primaryVideo", primaryVideoOpt.map(this::videoToMap).orElse(null));
+        result.put("primaryVideo", primaryVideo != null ? videoToMap(primaryVideo) : null);
         result.put("videos", allVideos.stream().map(this::videoToMap).collect(Collectors.toList()));
         return result;
+    }
+
+    /**
+     * Curated-first primary-video resolution. Admin-provided videos always outrank auto ones:
+     * 1. the explicit curated primary (unless flagged/unavailable) — legacy behavior;
+     * 2. the newest approved curated video;
+     * 3. the auto-sourced fallback video;
+     * 4. null (lesson serves without a video).
+     */
+    private LessonVideo resolvePrimaryVideo(List<LessonVideo> videos) {
+        if (videos.isEmpty()) return null;
+
+        Optional<LessonVideo> primaryCurated = videos.stream()
+                .filter(v -> "curated".equals(v.getSource()))
+                .filter(v -> Boolean.TRUE.equals(v.getIsPrimary()))
+                .filter(v -> !"flagged".equals(v.getCuratorStatus()) && !"unavailable".equals(v.getCuratorStatus()))
+                .findFirst();
+        if (primaryCurated.isPresent()) return primaryCurated.get();
+
+        Optional<LessonVideo> approvedCurated = videos.stream()
+                .filter(v -> "curated".equals(v.getSource()) && "approved".equals(v.getCuratorStatus()))
+                .max(Comparator.comparing(LessonVideo::getUpdatedAt, Comparator.nullsFirst(Comparator.naturalOrder())));
+        if (approvedCurated.isPresent()) return approvedCurated.get();
+
+        return videos.stream()
+                .filter(v -> "auto".equals(v.getSource()))
+                .filter(v -> !"flagged".equals(v.getCuratorStatus()) && !"unavailable".equals(v.getCuratorStatus()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Admin-triggered auto-curation: source a fallback video for a lesson from YouTube search.
+     * Only fills lessons that have no auto video yet; curated rows are never touched.
+     */
+    public Map<String, Object> autoCurateVideo(UUID lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
+
+        if (!autoCurationService.isEnabled()) {
+            throw new BadRequestException("YOUTUBE_API_KEY is not configured — automatic curation is disabled");
+        }
+
+        LessonVideo video = autoCurationService.autoCurateForLesson(lessonId);
+        if (video == null) {
+            throw new BadRequestException("Could not auto-source a video for lesson \"" + lesson.getTitle()
+                    + "\" — it may already have an auto video, or no suitable result was found");
+        }
+        return videoToMap(video);
     }
 
     public Lesson createLesson(CreateLessonRequest request, UUID adminUserId) {
@@ -176,7 +279,13 @@ public class LessonsService {
 
     public List<Map<String, Object>> getReviewQueue() {
         List<LessonVideo> videos = lessonVideoRepository.findReviewQueue();
-        return videos.stream().map(this::videoToMap).collect(Collectors.toList());
+        return videos.stream().map(v -> {
+            Map<String, Object> map = videoToMap(v);
+            // Lesson context so the review dashboard can render titles without extra lookups.
+            lessonRepository.findById(v.getLessonId())
+                    .ifPresent(l -> map.put("lessonTitle", l.getTitle()));
+            return map;
+        }).collect(Collectors.toList());
     }
 
     public List<Map<String, Object>> search(String query) {
@@ -257,6 +366,7 @@ public class LessonsService {
         map.put("title", video.getTitle());
         map.put("channel", video.getChannel());
         map.put("isPrimary", video.getIsPrimary());
+        map.put("source", video.getSource());
         map.put("curatorStatus", video.getCuratorStatus());
         map.put("dateReviewed", video.getDateReviewed() != null ? video.getDateReviewed().toString() : null);
         map.put("notes", video.getNotes());

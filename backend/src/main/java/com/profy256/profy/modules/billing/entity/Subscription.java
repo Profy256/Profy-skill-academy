@@ -57,6 +57,14 @@ public class Subscription {
     public UUID getId() { return id; }
     public UUID getUserId() { return userId; }
     public void setUserId(UUID userId) { this.userId = userId; }
+    public String getPlatform() { return platform; }
+    public void setPlatform(String platform) { this.platform = platform; }
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
+    public String getProviderCustomerId() { return providerCustomerId; }
+    public void setProviderCustomerId(String providerCustomerId) { this.providerCustomerId = providerCustomerId; }
+    public String getProviderSubscriptionId() { return providerSubscriptionId; }
+    public void setProviderSubscriptionId(String providerSubscriptionId) { this.providerSubscriptionId = providerSubscriptionId; }
     public String getPlan() { return plan; }
     public void setPlan(String plan) { this.plan = plan; }
     public String getStatus() { return status; }

@@ -8,7 +8,7 @@ A mobile learning platform for practical, applied skills — starting with Techn
 
 ## Features
 
-- **Curated Video Lessons** — All content human-curated, no auto-surfaced videos
+- **Curated Video Lessons** — Admin-curated videos always take priority; lessons without one are auto-filled from YouTube search (marked `auto`) until a curator replaces them
 - **AI Teacher** — Ask questions and get answers scoped to the current lesson
 - **Progress Tracking** — Save lessons, track course completion, view stats
 - **Freemium Model** — Free tier with ads, Premium ad-free experience
@@ -85,6 +85,7 @@ Copy `.env.example` to `.env` and configure:
 - `STRIPE_SECRET_KEY` — Stripe payment processing
 - `STRIPE_WEBHOOK_SECRET` — Stripe webhook verification
 - `REVENUECAT_WEBHOOK_AUTH` — RevenueCat webhook auth
+- `YOUTUBE_API_KEY` — YouTube Data API v3 key for automatic video curation (optional; unset = curated-only)
 
 ---
 

@@ -184,8 +184,12 @@ lesson_videos (
                    CHECK (curator_status IN ('pending','approved','flagged','unavailable')),
   date_reviewed    date,
   notes            text,                      -- curator evaluation notes
-  added_by         uuid NOT NULL REFERENCES admin_users(id)
+  source           text NOT NULL DEFAULT 'curated'   -- 'curated' (admin) | 'auto' (YouTube-search fallback; V9)
+                   CHECK (source IN ('curated','auto')),
+  added_by         uuid REFERENCES admin_users(id)   -- nullable: auto videos have no admin author (V9)
 )
+-- V9: partial unique index uq_lesson_videos_one_auto ON lesson_videos(lesson_id) WHERE source='auto'
+--     → at most one auto-sourced video per lesson.
 
 video_checks (
   id              uuid PK,
@@ -400,6 +404,7 @@ Separate login, separate JWT audience, audit logging middleware. `adminops` expo
 
 ### 6.10 Worker (`cmd/worker`)
 - **Video availability checker:** daily job iterates `lesson_videos` where `curator_status='approved'` and checks availability via YouTube oEmbed (`https://www.youtube.com/oembed?url=...`) — no API key needed at MVP. Unavailable → `curator_status='unavailable'`, surfaces in admin review dashboard, and (Phase-1 nice-to-have) consumer API serves the primary alternate instead.
+- **Auto-curation sweep (M11, 2026-09-15):** daily job auto-fills published lessons that have no video rows at all via YouTube Data API v3 search (`YOUTUBE_API_KEY`; unset = disabled). Complements the runtime fallback in `getLessonBySlug` (auto-fill on first learner read). Curated-first resolution: approved curated primary → newest approved curated → auto → none. Search costs 100 quota units/call — runs are capped and only fire for uncovered lessons.
 - Runs on its own schedule (cron-style loop); safe to crash/restart independently of the API.
 
 ---

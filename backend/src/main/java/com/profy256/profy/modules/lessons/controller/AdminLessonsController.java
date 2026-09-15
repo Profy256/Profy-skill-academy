@@ -82,6 +82,46 @@ public class AdminLessonsController {
         ));
     }
 
+    @GetMapping("/lessons")
+    public ResponseEntity<List<Map<String, Object>>> listLessons(
+            @RequestParam(required = false) String nodeId) {
+        List<Map<String, Object>> lessons = lessonsService.listAllLessons(nodeId);
+        return ResponseEntity.ok(lessons);
+    }
+
+    @GetMapping("/lessons/{id}")
+    public ResponseEntity<Map<String, Object>> getLesson(@PathVariable UUID id) {
+        return ResponseEntity.ok(lessonsService.getLessonById(id));
+    }
+
+    @DeleteMapping("/lessons/{id}")
+    @Audited
+    public ResponseEntity<Map<String, Object>> deleteLesson(@PathVariable UUID id) {
+        lessonsService.deleteLesson(id);
+        return ResponseEntity.ok(Map.of("status", "deleted"));
+    }
+
+    @GetMapping("/lessons/{id}/videos")
+    public ResponseEntity<List<Map<String, Object>>> listVideos(@PathVariable UUID id) {
+        return ResponseEntity.ok(lessonsService.listVideosByLesson(id));
+    }
+
+    @PostMapping("/lessons/{id}/videos/auto")
+    @Audited
+    public ResponseEntity<Map<String, Object>> autoCurateVideo(@PathVariable UUID id) {
+        Map<String, Object> video = lessonsService.autoCurateVideo(id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(video);
+    }
+
+    @DeleteMapping("/lessons/{id}/videos/{videoId}")
+    @Audited
+    public ResponseEntity<Map<String, Object>> deleteVideo(
+            @PathVariable UUID id,
+            @PathVariable UUID videoId) {
+        lessonsService.deleteVideo(videoId);
+        return ResponseEntity.ok(Map.of("status", "deleted"));
+    }
+
     @GetMapping("/review/videos")
     public ResponseEntity<List<Map<String, Object>>> getReviewQueue() {
         List<Map<String, Object>> queue = lessonsService.getReviewQueue();

@@ -46,6 +46,24 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > **Session note (2026-09-12):** README.md created with full project docs, tech stack, setup instructions
 > (Docker quick start + individual service run guides for backend, web, admin, mobile). Project pushed
 > to GitHub: https://github.com/Profy256/Profy-skill-academy.git
+>
+> **Session note (2026-09-15):** NEW FEATURE REQUESTED (product decision — supersedes the strict
+> "no auto-surfaced videos" rule in README/PRD for uncovered lessons):
+> **Automatic video curation fallback.** Admin-curated videos keep top priority; lessons WITHOUT any
+> curated video get one automatically sourced from the YouTube Data API v3 and shown immediately
+> (marked `source='auto'`) instead of nothing. Decisions confirmed with the owner:
+> (1) Source = YouTube Data API search (needs `YOUTUBE_API_KEY`), NOT LLM-suggested video IDs.
+> (2) Mechanism = runtime fallback on consumer lesson read + daily sweep job for never-visited lessons.
+> (3) Visibility = auto videos serve to learners immediately; admins review/replace them later.
+> Consumer resolution order: curated+approved primary → any curated+approved → auto → none.
+> Implementation plan = **Milestone 11 below**. Gotchas to remember:
+> - `lesson_videos.added_by` is NOT NULL FK to admin_users → make nullable in V9 (auto videos have no admin author)
+> - `curator_status` CHECK has no 'auto' value → do NOT put it there; add a `source` column ('curated'|'auto'),
+>   keep auto videos at `curator_status='pending'` so they surface in review
+> - one auto video per lesson: partial unique index `WHERE source='auto'` (race-safe upsert)
+> - YouTube search costs 100 quota units/call on the free tier → only fetch when a lesson has zero videos;
+>   if `YOUTUBE_API_KEY` is unset, log once and disable the feature silently (lesson payloads unaffected)
+> - YouTube client should follow the `OpenAiCompatibleProvider` RestTemplate pattern (timeouts, no new deps)
 
 ---
 
@@ -170,6 +188,28 @@ journey against the local API remains — blocked until M1 (auth) and M2 (conten
 
 **DoD:** end-to-end pass on staging: new user on mobile AND web → learn → ask AI → complete course → upgrade to premium → ads disappear → admin flags a video → replacement flow works.
 
+## Milestone 11 — Auto Video Curation (curated-first, auto fallback) — REQUESTED 2026-09-15
+> Do this before/alongside M9 if picked up in a fresh session. Curated videos always win; auto is
+> only a fallback for lessons with no curated video. Work top-to-bottom:
+> **Status 2026-09-15: core implementation COMPLETE, backend tests 94/94 green, admin tsc clean.**
+> Remaining: run Flyway V9 against a live DB (`docker compose up` → boot check), optionally wire
+> the review dashboard to highlight `source='auto'` rows.
+- [x] Flyway **V9__auto_curation.sql**: `source text NOT NULL DEFAULT 'curated' CHECK (source IN ('curated','auto'))`; `added_by` made nullable; partial unique index `uq_lesson_videos_one_auto ON lesson_videos(lesson_id) WHERE source='auto'` + `idx_lesson_videos_source`
+- [x] `LessonVideo` entity: nullable `addedBy`, `source` field (default 'curated'); `source` exposed in `videoToMap` payloads; `VideoApi.source` in `apps/admin/src/lib/api.ts`
+- [x] Config: `profy.youtube-api-key: ${YOUTUBE_API_KEY:}` in `application.yml` + `application-local.yml` + `.env.example`; `youtubeApiKey` on `AppConfig`
+- [x] `YouTubeSearchService` (modules/lessons/service): GET `https://www.googleapis.com/youtube/v3/search` part=snippet, type=video, videoEmbeddable=true, maxResults=5, relevanceLanguage=en; parses videoId/title/channelTitle; returns empty list on ANY error (never throws up); warns once when key unset
+- [x] `AutoCurationService`: query = parent course name + lesson title (≤80 chars) → search → skips IDs already attached → persists `LessonVideo(source='auto', isPrimary=true, curatorStatus='pending', addedBy=null)`; `DataIntegrityViolationException` → re-reads existing auto row (race-safe)
+- [x] `LessonsService.getLessonBySlug`: runtime auto-fill when lesson has zero videos (best-effort, never 500s) + curated-first `resolvePrimaryVideo` (approved curated primary → newest approved curated → auto → null; flagged/unavailable primary ignored)
+- [x] Sweep: `@EnableScheduling` on `ProfyApplication`; `AutoCurationSweepJob` daily 03:00 UTC (cron overridable via `profy.auto-curation-sweep-cron`), cap 50 lessons/run; `LessonRepository.findPublishedLessonsWithoutVideos()`
+- [x] Admin API: `POST /api/v1/admin/lessons/{id}/videos/auto` (`@Audited`, 400 when key unset or nothing found) in `AdminLessonsController` + `LessonsService.autoCurateVideo`; admin UI: AUTO/CURATED badges on video cards + "⚡ Auto-find video" button in `VideoPanel` + `api.videos.autoFind`
+- [x] Docs sweep: README features bullet + env var, PRD §5 non-goals + §7.2 principle/workflow, TECHNICAL_DOC §4.2 schema + §6.10 worker, `backend/api/openapi.yaml` (`source` on VideoCandidate + new endpoint)
+- [x] Tests: 11 new `AutoCurationServiceTest` (persist fields, skip-if-covered, no-key no-op, no-results, dup-ID skip, race, sweep caps) + 5 new resolution tests in `LessonsServiceTest`; removed stale `findByLessonIdAndIsPrimaryTrue` stubs
+- [x] Bonus: fixed 3 pre-existing `TaxonomyServiceTest` failures (missing save stub; depth test used depth-1 parent instead of depth-2 leaf; parent lookup happens before slug check → no slug stub needed)
+
+**DoD:** a published lesson with no admin video serves an auto-sourced YouTube video marked `source='auto'`; once an admin attaches a curated video it takes precedence; `YOUTUBE_API_KEY` unset = feature off, no errors; unit tests green. ✅ (backend logic verified by tests; live-DB boot check pending)
+
+Key files: `backend/src/main/java/com/profy256/profy/modules/lessons/**` (service/repo/entity/dto/controllers), `backend/src/main/resources/db/migration/V9__auto_curation.sql`, `backend/src/main/resources/application*.yml`, `backend/src/main/java/com/profy256/profy/platform/config/AppConfig.java`, `backend/src/main/java/com/profy256/profy/ProfyApplication.java`, `apps/admin/src/components/LessonEditor.tsx`, `apps/admin/src/lib/api.ts`, `.env.example`, `README.md`, `profy_skill_academy_prd.md`, `docs/TECHNICAL_DOC.md`, `backend/api/openapi.yaml`.
+
 ---
 
 ## Milestone Status
@@ -187,3 +227,4 @@ journey against the local API remains — blocked until M1 (auth) and M2 (conten
 | 8 — Billing | ⬜ Not started | |
 | 9 — Worker | ⬜ Not started | Worker stub exists; M9 job pending |
 | 10 — Hardening & Launch | ⬜ Not started | |
+| 11 — Auto Video Curation | 🚧 Nearly done (2026-09-15) | Curated-first + YouTube auto fallback implemented end-to-end; 94/94 backend tests green, admin tsc clean. Remaining: live-DB Flyway V9 boot check, review-dashboard highlighting of auto rows |

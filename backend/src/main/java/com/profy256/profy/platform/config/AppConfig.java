@@ -10,14 +10,29 @@ public class AppConfig {
     private String jwtSecret = "dev-only-insecure-secret-change-me";
     private int jwtAccessExpireMinutes = 15;
     private int jwtRefreshExpireDays = 30;
+
+    // AI — any OpenAI-compatible provider (OpenRouter, OpenAI, Gemini, Groq, Together, etc.)
     private String aiBaseUrl = "https://openrouter.ai/api/v1";
     private String aiApiKey = "";
     private String aiModel = "openai/gpt-4o-mini";
     private int aiFreeMsgsPerDay = 20;
     private int aiPremiumMsgsPerDay = 200;
+
+    // Stripe (international payments)
     private String stripeSecretKey = "";
     private String stripeWebhookSecret = "";
+
+    // MarzPay (local mobile money — UG/KE)
+    private String marzpayBaseUrl = "https://wallet.wearemarz.com/api/v1";
+    private String marzpayApiKey = "";
+    private String marzpayApiSecret = "";
+    private String marzpayCallbackUrl = "";
+
+    // Mobile (RevenueCat)
     private String revenuecatWebhookAuth = "";
+
+    // Other
+    private String youtubeApiKey = "";
     private String webOrigin = "";
     private String adminOrigin = "";
 
@@ -51,8 +66,23 @@ public class AppConfig {
     public String getStripeWebhookSecret() { return stripeWebhookSecret; }
     public void setStripeWebhookSecret(String stripeWebhookSecret) { this.stripeWebhookSecret = stripeWebhookSecret; }
 
+    public String getMarzpayBaseUrl() { return marzpayBaseUrl; }
+    public void setMarzpayBaseUrl(String marzpayBaseUrl) { this.marzpayBaseUrl = marzpayBaseUrl; }
+
+    public String getMarzpayApiKey() { return marzpayApiKey; }
+    public void setMarzpayApiKey(String marzpayApiKey) { this.marzpayApiKey = marzpayApiKey; }
+
+    public String getMarzpayApiSecret() { return marzpayApiSecret; }
+    public void setMarzpayApiSecret(String marzpayApiSecret) { this.marzpayApiSecret = marzpayApiSecret; }
+
+    public String getMarzpayCallbackUrl() { return marzpayCallbackUrl; }
+    public void setMarzpayCallbackUrl(String marzpayCallbackUrl) { this.marzpayCallbackUrl = marzpayCallbackUrl; }
+
     public String getRevenuecatWebhookAuth() { return revenuecatWebhookAuth; }
     public void setRevenuecatWebhookAuth(String revenuecatWebhookAuth) { this.revenuecatWebhookAuth = revenuecatWebhookAuth; }
+
+    public String getYoutubeApiKey() { return youtubeApiKey; }
+    public void setYoutubeApiKey(String youtubeApiKey) { this.youtubeApiKey = youtubeApiKey; }
 
     public String getWebOrigin() { return webOrigin; }
     public void setWebOrigin(String webOrigin) { this.webOrigin = webOrigin; }

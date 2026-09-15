@@ -22,6 +22,37 @@ public class TaxonomyService {
         this.taxonomyNodeRepository = taxonomyNodeRepository;
     }
 
+    public List<Map<String, Object>> listAllAdmin(Integer phase) {
+        List<TaxonomyNode> nodes;
+        if (phase != null) {
+            nodes = taxonomyNodeRepository.findAllByPhase(phase);
+        } else {
+            nodes = taxonomyNodeRepository.findAll();
+        }
+        return buildTree(nodes);
+    }
+
+    public Map<String, Object> getNodeById(UUID id) {
+        TaxonomyNode node = taxonomyNodeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Taxonomy node not found"));
+
+        List<TaxonomyNode> children = taxonomyNodeRepository.findByParentIdAndPhaseOrderBySortOrder(id, node.getPhase());
+
+        List<Map<String, Object>> childMaps = new ArrayList<>();
+        for (TaxonomyNode child : children) {
+            Map<String, Object> childMap = nodeToMap(child);
+            childMap.put("children", Collections.emptyList());
+            childMaps.add(childMap);
+        }
+
+        List<Map<String, String>> breadcrumb = buildBreadcrumb(node);
+
+        Map<String, Object> result = nodeToMap(node);
+        result.put("children", childMaps);
+        result.put("breadcrumb", breadcrumb);
+        return result;
+    }
+
     public List<Map<String, Object>> getTree(Integer phase) {
         int effectivePhase = phase != null ? phase : 1;
         List<TaxonomyNode> nodes = taxonomyNodeRepository.findByIsActiveTrueAndPhase(effectivePhase);

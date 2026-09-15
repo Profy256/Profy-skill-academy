@@ -1,26 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { taxonomy, type TaxNode, type NodeType } from "@/lib/mockData";
+import { useState, useEffect, useCallback } from "react";
+import { api, type TaxonomyApiNode } from "@/lib/api";
 
-const BADGE_VARS: Record<NodeType, { bg: string; text: string; label: string }> = {
+const BADGE_VARS: Record<string, { bg: string; text: string; label: string }> = {
   category: { bg: "var(--badge-warning-bg)", text: "var(--badge-warning-text)", label: "CAT" },
   subcategory: { bg: "var(--badge-info-bg)", text: "var(--badge-info-text)", label: "SUB" },
-  skill: { bg: "var(--badge-success-bg)", text: "var(--badge-success-text)", label: "SKILL" },
   course: { bg: "var(--badge-neutral-bg)", text: "var(--badge-neutral-text)", label: "COURSE" },
 };
 
+type NodeType = "category" | "subcategory" | "course";
+
 interface TreeNodeProps {
-  node: TaxNode;
+  node: TaxonomyApiNode;
   depth: number;
   selectedId: string | null;
   expandedIds: Set<string>;
-  onSelect: (node: TaxNode) => void;
+  onSelect: (node: TaxonomyApiNode) => void;
   onToggle: (id: string) => void;
   onAdd: (parentId: string) => void;
-  onMoveUp: (id: string, parentId: string | null) => void;
-  onMoveDown: (id: string, parentId: string | null) => void;
-  siblings: TaxNode[];
+  onDelete: (id: string) => void;
+  siblings: TaxonomyApiNode[];
   parentId: string | null;
 }
 
@@ -32,15 +32,14 @@ function TreeNode({
   onSelect,
   onToggle,
   onAdd,
-  onMoveUp,
-  onMoveDown,
+  onDelete,
   siblings,
   parentId,
 }: TreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0;
   const expanded = expandedIds.has(node.id);
   const selected = selectedId === node.id;
-  const badge = BADGE_VARS[node.type];
+  const badge = BADGE_VARS[node.nodeType] || BADGE_VARS.course;
   const idx = siblings.findIndex((s) => s.id === node.id);
 
   return (
@@ -62,7 +61,6 @@ function TreeNode({
           if (!selected) e.currentTarget.style.background = "transparent";
         }}
       >
-        {/* Expand toggle */}
         <button
           className="w-4 h-4 flex items-center justify-center shrink-0 transition-transform"
           style={{ color: "var(--text-3)", fontSize: "10px" }}
@@ -74,15 +72,19 @@ function TreeNode({
           {hasChildren ? (expanded ? "▾" : "▸") : <span style={{ opacity: 0 }}>▸</span>}
         </button>
 
-        {/* Label */}
         <span
           className="flex-1 text-sm truncate"
           style={{ color: depth === 0 ? "var(--text)" : "var(--text-2)", fontWeight: depth === 0 ? 600 : 400 }}
         >
-          {node.label}
+          {node.name}
         </span>
 
-        {/* Type badge */}
+        {!node.isActive && (
+          <span className="font-mono px-1 py-0.5 rounded-sm mr-1" style={{ fontSize: "8px", background: "var(--badge-danger-bg)", color: "var(--badge-danger-text)" }}>
+            OFF
+          </span>
+        )}
+
         <span
           className="font-mono shrink-0 px-1 py-0.5 rounded-sm"
           style={{ fontSize: "9px", background: badge.bg, color: badge.text, letterSpacing: "0.04em" }}
@@ -90,39 +92,8 @@ function TreeNode({
           {badge.label}
         </span>
 
-        {/* Action buttons — visible on hover */}
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ml-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            title="Move up"
-            onClick={() => onMoveUp(node.id, parentId)}
-            disabled={idx === 0}
-            className="w-5 h-5 flex items-center justify-center rounded transition-colors"
-            style={{ color: idx === 0 ? "var(--text-faint)" : "var(--text-2)", fontSize: "11px" }}
-            onMouseEnter={(e) => {
-              if (idx !== 0) e.currentTarget.style.background = "var(--panel-3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            ↑
-          </button>
-          <button
-            title="Move down"
-            onClick={() => onMoveDown(node.id, parentId)}
-            disabled={idx === siblings.length - 1}
-            className="w-5 h-5 flex items-center justify-center rounded transition-colors"
-            style={{ color: idx === siblings.length - 1 ? "var(--text-faint)" : "var(--text-2)", fontSize: "11px" }}
-            onMouseEnter={(e) => {
-              if (idx !== siblings.length - 1) e.currentTarget.style.background = "var(--panel-3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            ↓
-          </button>
-          {(node.type === "category" || node.type === "subcategory") && (
+          {(node.nodeType === "category" || node.nodeType === "subcategory") && (
             <button
               title="Add child"
               onClick={() => onAdd(node.id)}
@@ -140,6 +111,22 @@ function TreeNode({
               +
             </button>
           )}
+          <button
+            title="Delete"
+            onClick={() => onDelete(node.id)}
+            className="w-5 h-5 flex items-center justify-center rounded transition-colors"
+            style={{ color: "var(--text-faint)", fontSize: "11px" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--danger-soft)";
+              e.currentTarget.style.color = "var(--danger)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--text-faint)";
+            }}
+          >
+            ×
+          </button>
         </div>
       </div>
 
@@ -155,8 +142,7 @@ function TreeNode({
               onSelect={onSelect}
               onToggle={onToggle}
               onAdd={onAdd}
-              onMoveUp={onMoveUp}
-              onMoveDown={onMoveDown}
+              onDelete={onDelete}
               siblings={node.children!}
               parentId={node.id}
             />
@@ -167,34 +153,53 @@ function TreeNode({
   );
 }
 
-function moveNode(nodes: TaxNode[], id: string, dir: "up" | "down"): TaxNode[] {
-  const idx = nodes.findIndex((n) => n.id === id);
-  if (idx === -1) return nodes.map((n) => ({ ...n, children: n.children ? moveNode(n.children, id, dir) : undefined }));
-  const swapIdx = dir === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= nodes.length) return nodes;
-  const next = [...nodes];
-  [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-  return next;
+const TYPE_SEQUENCE: NodeType[] = ["category", "subcategory", "course"];
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
-const TYPE_SEQUENCE: NodeType[] = ["category", "subcategory", "course", "skill"];
-
 export default function TaxonomyManager() {
-  const [tree, setTree] = useState<TaxNode[]>(taxonomy);
-  const [selected, setSelected] = useState<TaxNode | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["cat-1", "cat-2", "cat-3"]));
+  const [tree, setTree] = useState<TaxonomyApiNode[]>([]);
+  const [selected, setSelected] = useState<TaxonomyApiNode | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editLabel, setEditLabel] = useState("");
   const [editType, setEditType] = useState<NodeType>("course");
+  const [editDescription, setEditDescription] = useState("");
   const [editDirty, setEditDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [newType, setNewType] = useState<NodeType>("course");
 
-  const handleSelect = (node: TaxNode) => {
+  const fetchTree = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await api.taxonomy.list();
+      setTree(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load taxonomy");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTree();
+  }, [fetchTree]);
+
+  const handleSelect = (node: TaxonomyApiNode) => {
     setSelected(node);
-    setEditLabel(node.label);
-    setEditType(node.type);
+    setEditLabel(node.name);
+    setEditType(node.nodeType as NodeType);
+    setEditDescription(node.description || "");
     setEditDirty(false);
     setSaved(false);
     setAddingTo(null);
@@ -208,28 +213,23 @@ export default function TaxonomyManager() {
     });
   };
 
-  const updateNodeLabel = (nodes: TaxNode[], id: string, label: string, type: NodeType): TaxNode[] =>
-    nodes.map((n) =>
-      n.id === id
-        ? { ...n, label, type }
-        : { ...n, children: n.children ? updateNodeLabel(n.children, id, label, type) : undefined }
-    );
-
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selected) return;
-    setTree((prev) => updateNodeLabel(prev, selected.id, editLabel, editType));
-    setSelected((prev) => (prev ? { ...prev, label: editLabel, type: editType } : null));
-    setEditDirty(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await api.taxonomy.update(selected.id, {
+        name: editLabel,
+        slug: slugify(editLabel),
+        description: editDescription,
+      });
+      setSelected((prev) => (prev ? { ...prev, name: editLabel, nodeType: editType, description: editDescription } : null));
+      setEditDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      fetchTree();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    }
   };
-
-  const addChildNode = (nodes: TaxNode[], parentId: string, child: TaxNode): TaxNode[] =>
-    nodes.map((n) =>
-      n.id === parentId
-        ? { ...n, children: [...(n.children || []), child] }
-        : { ...n, children: n.children ? addChildNode(n.children, parentId, child) : undefined }
-    );
 
   const handleAdd = (parentId: string) => {
     setAddingTo(parentId);
@@ -237,7 +237,6 @@ export default function TaxonomyManager() {
     setNewType("course");
     setSelected(null);
     setSaved(false);
-    // Expand parent
     setExpanded((prev) => new Set([...prev, parentId]));
   };
 
@@ -248,28 +247,35 @@ export default function TaxonomyManager() {
     setSelected(null);
   };
 
-  const handleConfirmAdd = () => {
+  const handleConfirmAdd = async () => {
     if (!newLabel.trim()) return;
-    const child: TaxNode = {
-      id: `node-${Date.now()}`,
-      label: newLabel.trim(),
-      type: newType,
-      children: newType === "category" || newType === "subcategory" ? [] : undefined,
-    };
-    if (addingTo === "__root__") {
-      setTree((prev) => [...prev, child]);
-    } else {
-      setTree((prev) => addChildNode(prev, addingTo!, child));
+    try {
+      const data: Record<string, unknown> = {
+        nodeType: newType,
+        name: newLabel.trim(),
+        slug: slugify(newLabel.trim()),
+      };
+      if (addingTo !== "__root__") {
+        data.parentNodeId = addingTo;
+      }
+      await api.taxonomy.create(data as Parameters<typeof api.taxonomy.create>[0]);
+      setAddingTo(null);
+      setNewLabel("");
+      fetchTree();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add node");
     }
-    setAddingTo(null);
-    setNewLabel("");
   };
 
-  const handleMoveUp = (id: string, _parentId: string | null) => {
-    setTree((prev) => moveNode(prev, id, "up"));
-  };
-  const handleMoveDown = (id: string, _parentId: string | null) => {
-    setTree((prev) => moveNode(prev, id, "down"));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this node? This cannot be undone.")) return;
+    try {
+      await api.taxonomy.delete(id);
+      if (selected?.id === id) setSelected(null);
+      fetchTree();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete");
+    }
   };
 
   const inputStyle = {
@@ -278,6 +284,14 @@ export default function TaxonomyManager() {
     color: "var(--text)",
     background: "var(--panel-2)",
   } as React.CSSProperties;
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center" style={{ color: "var(--text-3)" }}>
+        <div className="font-mono text-xs tracking-wider">Loading taxonomy...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full">
@@ -306,6 +320,12 @@ export default function TaxonomyManager() {
           </button>
         </div>
 
+        {error && (
+          <div className="px-4 py-2 font-mono text-xs" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
+            {error}
+          </div>
+        )}
+
         <div className="flex-1 scrollable py-1">
           {tree.map((node) => (
             <TreeNode
@@ -317,14 +337,12 @@ export default function TaxonomyManager() {
               onSelect={handleSelect}
               onToggle={handleToggle}
               onAdd={handleAdd}
-              onMoveUp={handleMoveUp}
-              onMoveDown={handleMoveDown}
+              onDelete={handleDelete}
               siblings={tree}
               parentId={null}
             />
           ))}
 
-          {/* Add-to-root form */}
           {addingTo === "__root__" && (
             <NewNodeForm
               label={newLabel}
@@ -349,14 +367,14 @@ export default function TaxonomyManager() {
                 EDITING NODE
               </div>
               <h2 className="text-xl font-semibold" style={{ color: "var(--text)" }}>
-                {selected.label}
+                {selected.name}
               </h2>
             </div>
 
             <div className="p-6 space-y-5" style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "4px" }}>
               <div>
                 <label className="block font-mono text-xs mb-1.5 tracking-wider" style={{ color: "var(--text-2)" }}>
-                  LABEL
+                  NAME
                 </label>
                 <input
                   value={editLabel}
@@ -366,6 +384,31 @@ export default function TaxonomyManager() {
                     setSaved(false);
                   }}
                   className="w-full px-3 py-2 text-sm outline-none transition-colors"
+                  style={inputStyle}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = "var(--accent)";
+                    e.currentTarget.style.background = "var(--panel)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                    e.currentTarget.style.background = "var(--panel-2)";
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block font-mono text-xs mb-1.5 tracking-wider" style={{ color: "var(--text-2)" }}>
+                  DESCRIPTION
+                </label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => {
+                    setEditDescription(e.target.value);
+                    setEditDirty(true);
+                    setSaved(false);
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm outline-none transition-colors resize-none"
                   style={inputStyle}
                   onFocus={(e) => {
                     e.currentTarget.style.borderColor = "var(--accent)";
@@ -399,7 +442,7 @@ export default function TaxonomyManager() {
                   ))}
                 </select>
                 <p className="font-mono text-xs mt-1.5" style={{ color: "var(--text-3)" }}>
-                  Note: changing type does not automatically restructure children.
+                  Slug: {slugify(editLabel || selected.name)}
                 </p>
               </div>
 
@@ -425,7 +468,7 @@ export default function TaxonomyManager() {
                 </button>
                 {saved && (
                   <span className="font-mono text-xs" style={{ color: "var(--ok)" }}>
-                    ✓ Saved
+                    Saved
                   </span>
                 )}
               </div>
@@ -439,7 +482,7 @@ export default function TaxonomyManager() {
                 </div>
                 <div className="space-y-1">
                   {selected.children.map((child) => {
-                    const badge = BADGE_VARS[child.type];
+                    const badge = BADGE_VARS[child.nodeType] || BADGE_VARS.course;
                     return (
                       <div
                         key={child.id}
@@ -454,18 +497,17 @@ export default function TaxonomyManager() {
                         }}
                       >
                         <span className="text-sm flex-1" style={{ color: "var(--text-2)" }}>
-                          {child.label}
+                          {child.name}
                         </span>
                         <span className="font-mono px-1 py-0.5 rounded-sm" style={{ fontSize: "9px", background: badge.bg, color: badge.text }}>
                           {badge.label}
                         </span>
-                        <span style={{ color: "var(--text-faint)", fontSize: "12px" }}>→</span>
+                        <span style={{ color: "var(--text-faint)", fontSize: "12px" }}>&rarr;</span>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Add child form inline */}
                 {addingTo === selected.id ? (
                   <NewNodeForm
                     label={newLabel}
@@ -475,7 +517,7 @@ export default function TaxonomyManager() {
                     onConfirm={handleConfirmAdd}
                     onCancel={() => setAddingTo(null)}
                     depth={0}
-                    allowedTypes={selected.type === "category" ? ["subcategory", "course", "skill"] : ["course", "skill"]}
+                    allowedTypes={selected.nodeType === "category" ? ["subcategory", "course"] : ["course"]}
                   />
                 ) : (
                   <button

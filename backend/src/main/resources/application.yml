@@ -43,13 +43,37 @@ management:
 
 profy:
   jwt-secret: ${JWT_SECRET:dev-only-insecure-secret-change-me}
+
+  # ── AI Provider ──────────────────────────────────────────────
+  # Works with ANY OpenAI-compatible API. Set the env vars:
+  #   OpenRouter:  AI_BASE_URL=https://openrouter.ai/api/v1
+  #   OpenAI:      AI_BASE_URL=https://api.openai.com/v1
+  #   Gemini:      AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+  #   Groq:        AI_BASE_URL=https://api.groq.com/openai/v1
+  #   Together:    AI_BASE_URL=https://api.together.xyz/v1
+  #   Any custom:  AI_BASE_URL=https://your-provider.com/v1
   ai-base-url: ${AI_BASE_URL:https://openrouter.ai/api/v1}
   ai-api-key: ${AI_API_KEY:}
   ai-model: ${AI_MODEL:openai/gpt-4o-mini}
   ai-free-msgs-per-day: ${AI_FREE_MSGS_PER_DAY:20}
   ai-premium-msgs-per-day: ${AI_PREMIUM_MSGS_PER_DAY:200}
+
+  # ── Stripe (International payments) ──────────────────────────
   stripe-secret-key: ${STRIPE_SECRET_KEY:}
   stripe-webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+
+  # ── MarzPay (Local mobile money: UG/KE) ─────────────────────
+  # Sign up: https://wallet.wearemarz.com
+  # Auth: HTTP Basic (base64 of "api_key:api_secret")
+  marzpay-base-url: ${MARZPAY_BASE_URL:https://wallet.wearemarz.com/api/v1}
+  marzpay-api-key: ${MARZPAY_API_KEY:}
+  marzpay-api-secret: ${MARZPAY_API_SECRET:}
+  marzpay-callback-url: ${MARZPAY_CALLBACK_URL:}
+
+  # ── Mobile (RevenueCat for iOS/Android) ──────────────────────
   revenuecat-webhook-auth: ${REVENUECAT_WEBHOOK_AUTH:}
+
+  # ── Other ────────────────────────────────────────────────────
+  youtube-api-key: ${YOUTUBE_API_KEY:}
   web-origin: ${WEB_ORIGIN:}
   admin-origin: ${ADMIN_ORIGIN:}

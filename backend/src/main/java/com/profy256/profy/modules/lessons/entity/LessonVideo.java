@@ -34,7 +34,10 @@ public class LessonVideo {
 
     private String notes;
 
-    @Column(name = "added_by", nullable = false)
+    @Column(name = "source", nullable = false)
+    private String source = "curated";
+
+    @Column(name = "added_by")
     private UUID addedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -80,6 +83,9 @@ public class LessonVideo {
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 
     public UUID getAddedBy() { return addedBy; }
     public void setAddedBy(UUID addedBy) { this.addedBy = addedBy; }

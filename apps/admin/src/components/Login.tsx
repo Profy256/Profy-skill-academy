@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { api, setToken } from "@/lib/api";
 
 interface Props {
   onAuth: () => void;
@@ -13,7 +14,7 @@ export default function Login({ onAuth }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       setError("Both fields are required.");
@@ -21,10 +22,15 @@ export default function Login({ onAuth }: Props) {
     }
     setLoading(true);
     setError("");
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const result = await api.auth.login(email, password);
+      setToken(result.accessToken);
       onAuth();
-    }, 480);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed. Check your credentials.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

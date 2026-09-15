@@ -157,6 +157,7 @@ class TaxonomyServiceTest {
     @Test
     void createNode_rootNode_depthZero() {
         when(taxonomyNodeRepository.findBySlug("root-node")).thenReturn(Optional.empty());
+        when(taxonomyNodeRepository.save(any(TaxonomyNode.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         TaxonomyCreateRequest request = new TaxonomyCreateRequest(
                 null, "category", "Root Node", "root-node", "desc", "icon", 1, true, 0);
@@ -169,10 +170,11 @@ class TaxonomyServiceTest {
 
     @Test
     void createNode_depthExceedsTwo_throwsBadRequest() {
-        when(taxonomyNodeRepository.findById(childId)).thenReturn(Optional.of(childNode));
+        // leafNode sits at depth 2 (the maximum); attaching a child under it would exceed the limit.
+        when(taxonomyNodeRepository.findById(leafId)).thenReturn(Optional.of(leafNode));
 
         TaxonomyCreateRequest request = new TaxonomyCreateRequest(
-                childId.toString(), "topic", "Deep Node", "deep", "desc", "icon", 1, true, 0);
+                leafId.toString(), "topic", "Deep Node", "deep", "desc", "icon", 1, true, 0);
 
         assertThatThrownBy(() -> taxonomyService.createNode(request))
                 .isInstanceOf(BadRequestException.class)
@@ -193,7 +195,7 @@ class TaxonomyServiceTest {
 
     @Test
     void createNode_nonexistentParent_throwsResourceNotFound() {
-        when(taxonomyNodeRepository.findBySlug("new-course")).thenReturn(Optional.empty());
+        // Parent lookup happens before the slug-uniqueness check, so no slug stub is needed.
         when(taxonomyNodeRepository.findById(any(UUID.class))).thenReturn(Optional.empty());
 
         TaxonomyCreateRequest request = new TaxonomyCreateRequest(

@@ -5,7 +5,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +17,15 @@ public interface LessonVideoRepository extends JpaRepository<LessonVideo, UUID> 
 
     List<LessonVideo> findByLessonIdAndCuratorStatus(UUID lessonId, String status);
 
+    Optional<LessonVideo> findByLessonIdAndSource(UUID lessonId, String source);
+
+    List<LessonVideo> findBySource(String source);
+
+    /**
+     * Review-queue feed: flagged/unavailable videos of any kind, plus auto-sourced videos
+     * still pending review. Ordered so auto videos awaiting first review surface first
+     * (newest first), then broken ones.
+     */
     @Query(value = """
             SELECT lv.* FROM lesson_videos lv
             LEFT JOIN video_checks vc ON vc.lesson_video_id = lv.id
@@ -26,7 +34,9 @@ public interface LessonVideoRepository extends JpaRepository<LessonVideo, UUID> 
                 WHERE vc2.lesson_video_id = lv.id
               )
             WHERE lv.curator_status IN ('flagged', 'unavailable')
-            ORDER BY lv.updated_at DESC
+               OR (lv.curator_status = 'pending' AND lv.source = 'auto')
+            ORDER BY (lv.curator_status IN ('flagged', 'unavailable')) DESC,
+                     lv.created_at DESC
             """, nativeQuery = true)
     List<LessonVideo> findReviewQueue();
 }

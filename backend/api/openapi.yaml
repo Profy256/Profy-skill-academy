@@ -994,6 +994,39 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/admin/lessons/{id}/videos/auto:
+    post:
+      tags: [admin]
+      summary: Auto-source a fallback video via YouTube Data API search
+      description: |
+        Finds a video for the lesson from YouTube search (query built from the parent
+        course name + lesson title) and persists it with `source=auto`,
+        `curator_status=pending`. Only fills lessons that have no auto video yet;
+        curated rows are never touched. Requires YOUTUBE_API_KEY to be configured.
+      operationId: adminAutoCurateVideo
+      security:
+        - adminAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: Auto video created (or the pre-existing auto video returned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoCandidate"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/admin/lessons/{id}/videos/{videoId}:
     put:
       tags: [admin]
@@ -1887,7 +1920,55 @@ components:
         notes:
           type: string
 
+    VideoInput:
+      type: object
+      properties:
+        youtube_url:
+          type: string
+          description: Full YouTube URL; the ID is extracted and validated server-side.
+        youtube_video_id:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{11}$"
+        title:
+          type: string
+        channel:
+          type: string
+        is_primary:
+          type: boolean
+        curator_status:
+          type: string
+          enum: [pending, approved, flagged, unavailable]
+        date_reviewed:
+          type: [string, "null"]
+          format: date
+        notes:
+          type: string
+
     VideoCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        youtube_video_id:
+          type: string
+        title:
+          type: string
+        channel:
+          type: [string, "null"]
+        is_primary:
+          type: boolean
+        source:
+          type: string
+          enum: [curated, auto]
+          description: |
+            `curated` = admin-provided (always takes priority).
+            `auto` = auto-sourced fallback from YouTube Data API search for lessons
+            without a curated video. One auto video per lesson; created with
+            `curator_status=pending` and a nullable `added_by`.
       type: object
       properties:
         id:

@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +22,17 @@ public class AdminTaxonomyController {
 
     public AdminTaxonomyController(TaxonomyService taxonomyService) {
         this.taxonomyService = taxonomyService;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Map<String, Object>>> listAll(
+            @RequestParam(required = false) Integer phase) {
+        return ResponseEntity.ok(taxonomyService.listAllAdmin(phase));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> getById(@PathVariable UUID id) {
+        return ResponseEntity.ok(taxonomyService.getNodeById(id));
     }
 
     @PostMapping

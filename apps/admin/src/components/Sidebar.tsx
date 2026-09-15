@@ -1,9 +1,8 @@
-type View = "taxonomy" | "lesson-editor" | "review" | "resources";
+type View = "taxonomy" | "lesson-editor" | "resources" | "review";
 
 interface Props {
   activeView: View;
   onNavigate: (v: View) => void;
-  flaggedCount: number;
   onLogout: () => void;
 }
 
@@ -26,12 +25,6 @@ const IconDoc = () => (
   </svg>
 );
 
-const IconFlag = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <path d="M3 1.5v11M3 1.5h7.5l-2 3.5 2 3.5H3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
 const IconFile = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path d="M8 1H4a1 1 0 00-1 1v10a1 1 0 001 1h6a1 1 0 001-1V5L8 1z" stroke="currentColor" strokeWidth="1" />
@@ -41,17 +34,23 @@ const IconFile = () => (
   </svg>
 );
 
+const IconShield = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M7 1L12 3V7C12 10 9.8 12.2 7 13C4.2 12.2 2 10 2 7V3L7 1Z" stroke="currentColor" strokeWidth="1" fill="none" />
+    <path d="M5 7L6.5 8.5L9.5 5.5" stroke="currentColor" strokeWidth="1" fill="none" />
+  </svg>
+);
+
 const navItems = [
   { id: "taxonomy" as View, label: "Taxonomy Manager", Icon: IconTree },
   { id: "lesson-editor" as View, label: "Lesson Editor", Icon: IconDoc },
   { id: "resources" as View, label: "Resources", Icon: IconFile },
-  { id: "review" as View, label: "Review Queue", Icon: IconFlag },
+  { id: "review" as View, label: "Review Queue", Icon: IconShield },
 ];
 
-export default function Sidebar({ activeView, onNavigate, flaggedCount, onLogout }: Props) {
+export default function Sidebar({ activeView, onNavigate, onLogout }: Props) {
   return (
     <aside className="flex flex-col w-52 shrink-0 border-r" style={{ background: "#141414", borderColor: "#262626" }}>
-      {/* Logo */}
       <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: "#262626" }}>
         <div className="font-mono text-xs tracking-widest" style={{ color: "#f59e0b" }}>
           PROFY ADMIN
@@ -61,7 +60,6 @@ export default function Sidebar({ activeView, onNavigate, flaggedCount, onLogout
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 scrollable-dark">
         <div className="px-3 pb-1.5">
           <span className="font-mono text-xs" style={{ color: "#4a4a4a" }}>
@@ -96,28 +94,22 @@ export default function Sidebar({ activeView, onNavigate, flaggedCount, onLogout
             >
               <Icon />
               <span className="font-mono text-xs flex-1">{label}</span>
-              {id === "review" && flaggedCount > 0 && (
-                <span className="font-mono text-xs px-1.5 py-0.5 rounded-sm" style={{ background: "#dc2626", color: "#fff", fontSize: "10px" }}>
-                  {flaggedCount}
-                </span>
-              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Footer */}
       <div className="px-4 py-4 border-t" style={{ borderColor: "#262626" }}>
         <div className="flex items-center gap-2.5 mb-3">
           <div className="w-6 h-6 rounded-full flex items-center justify-center font-mono text-xs font-semibold shrink-0" style={{ background: "#232323", color: "#f59e0b" }}>
-            SC
+            A
           </div>
           <div className="min-w-0">
             <div className="font-mono text-xs truncate" style={{ color: "#8f8f8f" }}>
-              sarah@profy.io
+              admin@profy.io
             </div>
             <div className="font-mono text-xs" style={{ color: "#5c5c5c", fontSize: "10px" }}>
-              Curator
+              Administrator
             </div>
           </div>
         </div>

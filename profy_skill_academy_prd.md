@@ -62,7 +62,7 @@ All three consume the same backend/API and database, but ship as independent cod
 
 ### Non-Goals (Phase 1)
 - Vocational/trade categories — deferred to Phase 2, hidden from UI at launch
-- Dynamic/algorithmic YouTube search-and-display — all videos are human-curated, never auto-surfaced to end users
+- Dynamic/algorithmic YouTube search-and-display as a *replacement* for curation — admin-curated videos always take priority. An automatic YouTube-search fallback covers lessons a curator has not provided a video for yet (product decision, 2026-09-15); see §7.2
 - Full certificate generation/verification system — deferred to Phase 2, DB schema should anticipate it
 - Emotional Mentor — removed from scope entirely
 
@@ -116,7 +116,7 @@ Automotive · Beauty & Fashion · Manufacturing · etc.
 
 ### 7.2 Lesson Content & Video Curation
 
-**Principle:** Profy Skill Academy curates every video. No dynamic YouTube search-and-display to end users.
+**Principle:** Admin-curated videos always take priority. Lessons a curator has not provided a video for are covered by an automatic YouTube-search fallback (`source='auto'`), clearly distinguishable and reviewed/replaced by curators later (product decision, 2026-09-15 — supersedes the original strict curated-only rule).
 
 **Curation workflow (via Admin Web App):**
 1. Curator creates a lesson within its Skill/Course (e.g. Python → Variables → Introduction to Variables)
@@ -124,8 +124,9 @@ Automotive · Beauty & Fashion · Manufacturing · etc.
 3. Evaluates each on: relevance, teaching quality, correctness, language, length, production quality, availability, fit to the lesson
 4. Selects one primary video + optional alternates
 5. Pastes the chosen YouTube link directly into the admin panel and attaches it to the lesson — this is the priority path, not automated fetching
-6. Lesson record stores: YouTube video ID, title, channel, lesson ID, curator status, date reviewed
-7. System periodically checks video availability; flags for replacement if a video goes down
+6. Lesson record stores: YouTube video ID, title, channel, source (curated/auto), lesson ID, curator status, date reviewed
+7. **Automatic fallback:** a lesson with no video is auto-filled (runtime on first learner read + daily sweep) from YouTube Data API search; the auto video serves immediately marked `source='auto'`, stays in the review queue, and is replaced the moment a curator attaches a curated video
+8. System periodically checks video availability; flags for replacement if a video goes down
 
 **Lesson content fields (also what the AI Teacher is scoped to — see 7.3):**
 - Lesson title, description, written explanation, objectives, examples, exercises, quizzes

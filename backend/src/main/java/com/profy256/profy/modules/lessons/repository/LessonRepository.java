@@ -17,7 +17,22 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     List<Lesson> findByStatusAndNodeId(String status, UUID nodeId);
 
+    List<Lesson> findByNodeId(UUID nodeId);
+
     @Query("SELECT l FROM Lesson l WHERE LOWER(l.title) LIKE LOWER(CONCAT('%', :query, '%')) "
             + "OR LOWER(l.description) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<Lesson> searchByTitleOrDescription(@Param("query") String query);
+
+    /**
+     * Published lessons that have no video rows at all — candidates for auto-curation.
+     * (Ordering by created_at keeps the sweep deterministic and lets the job process
+     * the oldest uncovered lessons first.)
+     */
+    @Query("""
+            SELECT l FROM Lesson l
+            WHERE l.status = 'published'
+              AND NOT EXISTS (SELECT 1 FROM LessonVideo v WHERE v.lessonId = l.id)
+            ORDER BY l.createdAt ASC
+            """)
+    List<Lesson> findPublishedLessonsWithoutVideos();
 }
