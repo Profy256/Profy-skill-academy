@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, type ReviewQueueItem } from "@/lib/api";
+import { api, type ReviewQueueItem, type UncoveredLessonItem } from "@/lib/api";
 
 type QueueFilter = "all" | "auto-pending" | "flagged-unavailable";
+type Tab = "review" | "coverage";
 
 /** Status badge styling for queue rows. */
 const STATUS_VARS: Record<string, { bg: string; text: string; label: string }> = {
@@ -20,7 +21,10 @@ const REASON_VARS: Record<string, { bg: string; text: string; label: string }> =
 };
 
 export default function ReviewDashboard() {
+  const [tab, setTab] = useState<Tab>("review");
   const [items, setItems] = useState<ReviewQueueItem[]>([]);
+  const [uncovered, setUncovered] = useState<UncoveredLessonItem[]>([]);
+  const [uncoveredLoaded, setUncoveredLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<QueueFilter>("all");
@@ -38,9 +42,23 @@ export default function ReviewDashboard() {
     }
   }, []);
 
+  const fetchUncovered = useCallback(async () => {
+    try {
+      const data = await api.lessons.uncoveredLessons();
+      setUncovered(data);
+      setUncoveredLoaded(true);
+    } catch (err) {
+      console.error("Failed to load coverage report", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchQueue();
   }, [fetchQueue]);
+
+  useEffect(() => {
+    if (tab === "coverage" && !uncoveredLoaded) fetchUncovered();
+  }, [tab, uncoveredLoaded, fetchUncovered]);
 
   const handleApprove = async (item: ReviewQueueItem) => {
     try {
@@ -93,53 +111,87 @@ export default function ReviewDashboard() {
   return (
     <div className="h-full flex flex-col" style={{ background: "var(--bg)" }}>
       {/* Header */}
-      <div className="px-8 py-5 border-b flex items-center justify-between" style={{ background: "var(--panel)", borderColor: "var(--border)" }}>
-        <div>
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-            Review Queue
-          </h2>
-          <p className="font-mono text-xs mt-0.5" style={{ color: "var(--text-3)" }}>
+      <div className="px-8 py-5 border-b" style={{ background: "var(--panel)", borderColor: "var(--border)" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-5">
+            <button
+              onClick={() => setTab("review")}
+              className="font-mono text-sm font-semibold pb-1 transition-colors"
+              style={{
+                color: tab === "review" ? "var(--text)" : "var(--text-faint)",
+                borderBottom: tab === "review" ? "2px solid var(--accent)" : "2px solid transparent",
+              }}
+            >
+              Review Queue
+            </button>
+            <button
+              onClick={() => setTab("coverage")}
+              className="font-mono text-sm font-semibold pb-1 transition-colors"
+              style={{
+                color: tab === "coverage" ? "var(--text)" : "var(--text-faint)",
+                borderBottom: tab === "coverage" ? "2px solid var(--accent)" : "2px solid transparent",
+              }}
+            >
+              Coverage{uncoveredLoaded && uncovered.length > 0 ? ` (${uncovered.length})` : ""}
+            </button>
+          </div>
+
+          {tab === "review" && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <label className="font-mono text-xs" style={{ color: "var(--text-3)" }}>
+                  SHOW
+                </label>
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as QueueFilter)}
+                  className="font-mono text-xs px-2 py-1.5 outline-none cursor-pointer"
+                  style={{
+                    border: "1px solid var(--border)",
+                    borderRadius: "3px",
+                    color: "var(--text-2)",
+                    background: "var(--panel-3)",
+                  }}
+                >
+                  <option value="all">All</option>
+                  <option value="auto-pending">Auto videos pending</option>
+                  <option value="flagged-unavailable">Flagged / unavailable</option>
+                </select>
+              </div>
+              <button
+                onClick={fetchQueue}
+                className="font-mono text-xs px-3 py-1.5 transition-colors"
+                style={{ border: "1px solid var(--border)", borderRadius: "3px", color: "var(--text-2)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-2)"; }}
+              >
+                Refresh
+              </button>
+            </div>
+          )}
+          {tab === "coverage" && (
+            <button
+              onClick={fetchUncovered}
+              className="font-mono text-xs px-3 py-1.5 transition-colors"
+              style={{ border: "1px solid var(--border)", borderRadius: "3px", color: "var(--text-2)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-2)"; }}
+            >
+              Refresh
+            </button>
+          )}
+        </div>
+        {tab === "review" && (
+          <p className="font-mono text-xs mt-2" style={{ color: "var(--text-3)" }}>
             {autoPendingCount} auto-sourced video{autoPendingCount !== 1 ? "s" : ""} awaiting review ·{" "}
             {brokenCount} flagged/unavailable
           </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="font-mono text-xs" style={{ color: "var(--text-3)" }}>
-              SHOW
-            </label>
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as QueueFilter)}
-              className="font-mono text-xs px-2 py-1.5 outline-none cursor-pointer"
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: "3px",
-                color: "var(--text-2)",
-                background: "var(--panel-3)",
-              }}
-            >
-              <option value="all">All</option>
-              <option value="auto-pending">Auto videos pending</option>
-              <option value="flagged-unavailable">Flagged / unavailable</option>
-            </select>
-          </div>
-          <button
-            onClick={fetchQueue}
-            className="font-mono text-xs px-3 py-1.5 transition-colors"
-            style={{ border: "1px solid var(--border)", borderRadius: "3px", color: "var(--text-2)" }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-2)"; }}
-          >
-            Refresh
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* Table */}
+      {/* Content */}
       <div className="flex-1 scrollable px-8 py-6">
-        {loading ? (
+        {tab === "review" && (loading ? (
           <div className="flex flex-col items-center justify-center h-64">
             <div className="font-mono text-xs tracking-widest" style={{ color: "var(--text-faint)" }}>
               LOADING...
@@ -288,8 +340,100 @@ export default function ReviewDashboard() {
               );
             })}
           </div>
-        )}
+        ))}
+        {tab === "coverage" && <CoverageTable uncovered={uncovered} loaded={uncoveredLoaded} onRefresh={fetchUncovered} />}
       </div>
+    </div>
+  );
+}
+
+/** Coverage report: published lessons with no video at all — needs manual curation. */
+function CoverageTable({
+  uncovered,
+  loaded,
+  onRefresh,
+}: {
+  uncovered: UncoveredLessonItem[];
+  loaded: boolean;
+  onRefresh: () => void;
+}) {
+  if (!loaded) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <div className="font-mono text-xs tracking-widest" style={{ color: "var(--text-faint)" }}>
+          LOADING...
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="font-mono text-xs mb-4" style={{ color: "var(--text-3)" }}>
+        Published lessons with no video (auto-curation found nothing or is disabled) —{" "}
+        {uncovered.length === 0 ? "full coverage 🎉" : `${uncovered.length} lesson${uncovered.length !== 1 ? "s" : ""} need manual curation`}{" "}
+        <button
+          onClick={onRefresh}
+          className="ml-1 underline transition-colors"
+          style={{ color: "var(--accent)" }}
+        >
+          refresh
+        </button>
+      </p>
+      {uncovered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-48">
+          <div className="font-mono text-xs tracking-widest mb-2" style={{ color: "var(--text-faint)" }}>
+            FULL COVERAGE
+          </div>
+          <div className="text-sm" style={{ color: "var(--text-3)" }}>
+            Every published lesson has a video.
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "4px", overflow: "hidden" }}>
+          <div
+            className="grid font-mono text-xs px-4 py-2.5 border-b"
+            style={{
+              gridTemplateColumns: "2.2fr 1.6fr 1.2fr",
+              borderColor: "var(--border)",
+              background: "var(--panel-2)",
+              color: "var(--text-3)",
+              letterSpacing: "0.05em",
+            }}
+          >
+            <span>LESSON</span>
+            <span>COURSE</span>
+            <span>CREATED</span>
+          </div>
+          {uncovered.map((l, i) => (
+            <div
+              key={l.id}
+              className="grid items-center px-4 py-3 transition-colors"
+              style={{
+                gridTemplateColumns: "2.2fr 1.6fr 1.2fr",
+                borderBottom: i < uncovered.length - 1 ? "1px solid var(--border-faint)" : "none",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <div>
+                <div className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>
+                  {l.title}
+                </div>
+                <div className="font-mono text-xs truncate" style={{ color: "var(--text-3)" }}>
+                  /{l.slug}
+                </div>
+              </div>
+              <div className="text-sm truncate pr-3" style={{ color: "var(--text-2)" }}>
+                {l.courseName}
+              </div>
+              <div className="font-mono text-xs" style={{ color: "var(--text-3)" }}>
+                {l.createdAt ? l.createdAt.slice(0, 10) : "—"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

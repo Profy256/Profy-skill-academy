@@ -1,5 +1,6 @@
 package com.profy256.profy.modules.lessons.repository;
 
+import com.profy256.profy.modules.lessons.dto.UncoveredLessonRow;
 import com.profy256.profy.modules.lessons.entity.Lesson;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -35,4 +36,19 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
             ORDER BY l.createdAt ASC
             """)
     List<Lesson> findPublishedLessonsWithoutVideos();
+
+    /**
+     * Uncovered-lessons report rows: same set as {@link #findPublishedLessonsWithoutVideos()}
+     * plus the parent course name, for the admin coverage report.
+     */
+    @Query("""
+            SELECT new com.profy256.profy.modules.lessons.dto.UncoveredLessonRow(
+                l.id, l.title, l.slug, l.createdAt, t.name)
+            FROM Lesson l
+            JOIN TaxonomyNode t ON t.id = l.nodeId
+            WHERE l.status = 'published'
+              AND NOT EXISTS (SELECT 1 FROM LessonVideo v WHERE v.lessonId = l.id)
+            ORDER BY l.createdAt ASC
+            """)
+    List<UncoveredLessonRow> findUncoveredLessonReportRows();
 }

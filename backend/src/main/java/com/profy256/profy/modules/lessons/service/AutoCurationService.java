@@ -129,16 +129,46 @@ public class AutoCurationService {
     }
 
     /**
-     * Search query from the lesson topic: parent course name + lesson title.
-     * Falls back to the bare lesson title if the parent node is missing.
+     * Search query from the lesson topic: full taxonomy path + lesson title.
+     * Walks up the taxonomy tree to include category context, preventing
+     * cross-contamination (e.g., "Gin" returning Go web framework instead of
+     * Spanish language content).
+     *
+     * Example: "Spanish > Spanish from Zero > Basic greetings and phrases"
+     * Falls back to "courseName lessonTitle" if ancestors are missing.
      */
     private String buildQuery(Lesson lesson) {
         String title = lesson.getTitle();
-        String courseName = taxonomyNodeRepository.findById(lesson.getNodeId())
-                .map(TaxonomyNode::getName)
-                .orElse("");
-        String query = (courseName.isEmpty() ? title : courseName + " " + title)
-                .replaceAll("\\s+", " ").trim();
+        String courseName = "";
+        String categoryName = "";
+
+        var courseNode = taxonomyNodeRepository.findById(lesson.getNodeId()).orElse(null);
+        if (courseNode != null) {
+            courseName = courseNode.getName();
+            // Walk up to find the category (depth=0) for context
+            UUID parentId = courseNode.getParentId();
+            while (parentId != null) {
+                var parentNode = taxonomyNodeRepository.findById(parentId).orElse(null);
+                if (parentNode == null) break;
+                if (parentNode.getDepth() == 0) {
+                    categoryName = parentNode.getName();
+                    break;
+                }
+                parentId = parentNode.getParentId();
+            }
+        }
+
+        // Build query with category context to disambiguate similar terms
+        String query;
+        if (!categoryName.isEmpty() && !courseName.isEmpty()) {
+            query = categoryName + " " + courseName + " " + title;
+        } else if (!courseName.isEmpty()) {
+            query = courseName + " " + title;
+        } else {
+            query = title;
+        }
+
+        query = query.replaceAll("\\s+", " ").trim();
         if (query.length() > 80) {
             query = query.substring(0, 80);
         }

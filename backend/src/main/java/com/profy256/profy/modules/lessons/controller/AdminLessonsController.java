@@ -127,4 +127,9 @@ public class AdminLessonsController {
         List<Map<String, Object>> queue = lessonsService.getReviewQueue();
         return ResponseEntity.ok(queue);
     }
+
+    @GetMapping("/report/uncovered-lessons")
+    public ResponseEntity<List<Map<String, Object>>> getUncoveredLessonsReport() {
+        return ResponseEntity.ok(lessonsService.getUncoveredLessonsReport());
+    }
 }

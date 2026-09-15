@@ -92,6 +92,8 @@ export const api = {
       request<{ status: string }>(`/api/v1/admin/lessons/${id}`, { method: "DELETE" }),
     reviewQueue: () =>
       request<ReviewQueueItem[]>(`/api/v1/admin/review/videos`),
+    uncoveredLessons: () =>
+      request<UncoveredLessonItem[]>(`/api/v1/admin/report/uncovered-lessons`),
   },
 
   videos: {
@@ -200,6 +202,14 @@ export interface ReviewQueueItem {
   addedBy: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+export interface UncoveredLessonItem {
+  id: string;
+  title: string;
+  slug: string;
+  courseName: string;
+  createdAt: string | null;
 }
 
 export interface ResourceApi {

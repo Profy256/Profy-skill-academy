@@ -2,6 +2,7 @@ package com.profy256.profy.modules.lessons.service;
 
 import com.profy256.profy.modules.lessons.dto.LessonRequests.CreateLessonRequest;
 import com.profy256.profy.modules.lessons.dto.LessonRequests.VideoInput;
+import com.profy256.profy.modules.lessons.dto.UncoveredLessonRow;
 import com.profy256.profy.modules.lessons.entity.Lesson;
 import com.profy256.profy.modules.lessons.entity.LessonVideo;
 import com.profy256.profy.modules.lessons.repository.LessonRepository;
@@ -17,6 +18,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -471,5 +473,48 @@ class LessonsServiceTest {
 
         assertThat(queue).hasSize(1);
         assertThat(queue.get(0).containsKey("lessonTitle")).isFalse();
+    }
+
+    @Test
+    void getReviewQueue_includesPendingAutoVideo() {
+        LessonVideo pendingAuto = new LessonVideo();
+        pendingAuto.setId(UUID.randomUUID());
+        pendingAuto.setLessonId(lessonId);
+        pendingAuto.setYoutubeVideoId("auto5678901");
+        pendingAuto.setTitle("Auto Video");
+        pendingAuto.setCuratorStatus("pending");
+        pendingAuto.setSource("auto");
+
+        when(lessonVideoRepository.findReviewQueue()).thenReturn(List.of(pendingAuto));
+        when(lessonRepository.findById(lessonId)).thenReturn(Optional.of(publishedLesson));
+
+        List<Map<String, Object>> queue = lessonsService.getReviewQueue();
+
+        assertThat(queue).hasSize(1);
+        assertThat(queue.get(0).get("source")).isEqualTo("auto");
+        assertThat(queue.get(0).get("curatorStatus")).isEqualTo("pending");
+        assertThat(queue.get(0).get("lessonTitle")).isEqualTo("Variables");
+    }
+
+    @Test
+    void getUncoveredLessonsReport_mapsProjectionRows() {
+        when(lessonRepository.findUncoveredLessonReportRows()).thenReturn(List.of(
+                new UncoveredLessonRow(lessonId, "Variables", "variables", Instant.now(), "Java Basics")));
+
+        List<Map<String, Object>> report = lessonsService.getUncoveredLessonsReport();
+
+        assertThat(report).hasSize(1);
+        assertThat(report.get(0).get("id")).isEqualTo(lessonId.toString());
+        assertThat(report.get(0).get("title")).isEqualTo("Variables");
+        assertThat(report.get(0).get("slug")).isEqualTo("variables");
+        assertThat(report.get(0).get("courseName")).isEqualTo("Java Basics");
+        assertThat(report.get(0).get("createdAt")).isNotNull();
+    }
+
+    @Test
+    void getUncoveredLessonsReport_emptyWhenFullyCovered() {
+        when(lessonRepository.findUncoveredLessonReportRows()).thenReturn(Collections.emptyList());
+
+        assertThat(lessonsService.getUncoveredLessonsReport()).isEmpty();
     }
 }

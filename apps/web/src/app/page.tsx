@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
 
 type Screen =
@@ -27,16 +27,17 @@ interface NavState {
 }
 
 import {
-  CATEGORIES,
-  FEATURED_COURSES,
+  loadCategories,
+  loadLessonDetail,
   INTEREST_OPTIONS,
-  SAVED_LESSONS,
   getCourse,
   type CategoryItem,
   type CourseItem,
   type LessonItem,
   type SubcategoryItem,
 } from "@/lib/data";
+import type { ApiLesson } from "@/lib/api";
+import { fetchResources } from "@/lib/api";
 
 const FG = "var(--foreground)";
 const FG_MUTED = "var(--muted-foreground)";
@@ -395,6 +396,12 @@ function InterestsScreen({ onContinue }: { onContinue: () => void }) {
 }
 
 function HomeScreen({ onNav, onCategory }: { onNav: (s: Screen) => void; onCategory: (c: CategoryItem) => void }) {
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+
+  useEffect(() => {
+    loadCategories().then(setCategories).catch(console.error);
+  }, []);
+
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       {/* Header */}
@@ -421,58 +428,11 @@ function HomeScreen({ onNav, onCategory }: { onNav: (s: Screen) => void; onCateg
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {/* Continue learning */}
-        <div className="mb-6" style={{ maxWidth: 600 }}>
-          <div style={{ background: CARD, borderRadius: 10, padding: "16px 20px", border: `1px solid ${BORDER}` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Continue where you left off</div>
-            <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 500, color: FG }}>Defining routes and handlers</div>
-            <div style={{ fontSize: 13, color: FG_MUTED, marginBottom: 10 }}>REST APIs with Go &amp; Gin · Lesson 3</div>
-            <div style={{ background: BORDER, borderRadius: 4, height: 5, marginBottom: 6 }}><div style={{ width: "33%", height: "100%", background: PRIMARY, borderRadius: 4 }} /></div>
-            <div style={{ fontSize: 12, color: FG_MUTED }}>2 of 6 lessons complete</div>
-          </div>
-        </div>
-
-        {/* Featured */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 600, color: FG }}>Featured Skills</div>
-            <span style={{ fontSize: 13, color: SECONDARY, fontWeight: 600, cursor: "pointer" }}>See all</span>
-          </div>
-          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-            {FEATURED_COURSES.map((fc) => (
-              <button
-                key={fc.id}
-                onClick={() => onNav("lesson")}
-                style={{
-                  background: SURFACE,
-                  borderRadius: 10,
-                  border: `1px solid ${BORDER}`,
-                  overflow: "hidden",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  boxShadow: "0 1px 4px rgb(var(--shadow-color) / var(--shadow-opacity))",
-                }}
-              >
-                <div style={{ height: 140, background: CARD, position: "relative", overflow: "hidden" }}>
-                  <img src={`https://images.unsplash.com/${fc.img}?w=400&h=140&fit=crop&auto=format`} alt={fc.title} style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.8 }} />
-                  <div style={{ position: "absolute", top: 10, left: 10, background: SURFACE, borderRadius: 6, padding: "3px 10px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: PRIMARY, textTransform: "uppercase", letterSpacing: 0.8 }}>{fc.tag}</span>
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px 16px" }}>
-                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: FG, lineHeight: 1.3, marginBottom: 4 }}>{fc.title}</div>
-                  <div style={{ fontSize: 13, color: FG_MUTED }}>{fc.instructor} · {fc.level}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Categories */}
         <div className="mb-6">
           <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 600, color: FG, marginBottom: 12 }}>Browse by Category</div>
           <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => onCategory(cat)}
@@ -661,7 +621,18 @@ function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack
 function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem; course: CourseItem; onBack: () => void; onAiChat: () => void }) {
   const [activeTab, setActiveTab] = useState<"steps" | "tools" | "examples" | "notes" | "quiz">("steps");
   const [completed, setCompleted] = useState(lesson.completed);
+  const [apiLesson, setApiLesson] = useState<ApiLesson | null>(null);
   const tabs = [{ id: "steps", label: "Steps" }, { id: "tools", label: "Tools" }, { id: "examples", label: "Examples" }, { id: "notes", label: "Notes" }, { id: "quiz", label: "Quiz" }] as const;
+
+  useEffect(() => {
+    loadLessonDetail(lesson.id).then(setApiLesson).catch(console.error);
+  }, [lesson.id]);
+
+  const objectives = apiLesson?.objectives || [];
+  const examples = apiLesson?.examples || [];
+  const exercises = apiLesson?.exercises || [];
+  const quizzes = apiLesson?.quizzes || [];
+  const explanation = apiLesson?.explanation || "";
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
@@ -719,51 +690,62 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
           <div className="pb-12">
             {activeTab === "steps" && (
               <div className="flex flex-col gap-4">
-                <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.7, fontStyle: "italic" }}>
-                  In this lesson, you&apos;ll define your first Gin routes and write handlers that respond to HTTP requests.
-                </p>
-                {[{ n: 1, title: "Create the router instance", body: "Call gin.Default() to get a router with Logger and Recovery middleware." }, { n: 2, title: "Define your first route", body: 'Use router.GET("/ping", handler) to register a GET endpoint.' }, { n: 3, title: "Write a handler function", body: "Handlers receive a *gin.Context. Use c.JSON() to return JSON." }, { n: 4, title: "Run the server", body: 'Call router.Run(":8080") to start listening.' }].map((step) => (
-                  <div key={step.n} className="flex gap-3">
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: CARD, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: PRIMARY }}>{step.n}</span>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: FG, marginBottom: 2 }}>{step.title}</div>
-                      <div style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.6 }}>{step.body}</div>
-                    </div>
-                  </div>
-                ))}
+                {explanation && (
+                  <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.7, fontStyle: "italic" }}>
+                    {explanation}
+                  </p>
+                )}
+                {objectives.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: FG_MUTED, letterSpacing: 1, textTransform: "uppercase", marginTop: 8 }}>Learning Objectives</div>
+                    {objectives.map((obj, i) => (
+                      <div key={i} className="flex gap-3">
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: CARD, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: PRIMARY }}>{i + 1}</span>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 15, color: FG, lineHeight: 1.6 }}>{obj}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {!explanation && objectives.length === 0 && (
+                  <p style={{ fontSize: 15, color: FG_MUTED, lineHeight: 1.6 }}>
+                    Lesson content is loading from the server...
+                  </p>
+                )}
               </div>
             )}
             {activeTab === "tools" && (
               <div className="flex flex-col gap-3">
                 <p style={{ fontSize: 15, color: FG_MUTED, lineHeight: 1.6 }}>What you need for this lesson:</p>
-                {["Go 1.21 or later", "gin-gonic/gin v1.9", "curl or Postman for testing", "A code editor"].map((tool) => (
-                  <div key={tool} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: CARD, borderRadius: 10, border: `1px solid ${BORDER}` }}>
+                {exercises.length > 0 ? exercises.map((exercise) => (
+                  <div key={exercise} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: CARD, borderRadius: 10, border: `1px solid ${BORDER}` }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={SECONDARY} strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
-                    <span style={{ fontSize: 14, color: FG, fontWeight: 500 }}>{tool}</span>
+                    <span style={{ fontSize: 14, color: FG, fontWeight: 500 }}>{exercise}</span>
                   </div>
-                ))}
+                )) : (
+                  <p style={{ fontSize: 14, color: FG_MUTED }}>No exercises available for this lesson yet.</p>
+                )}
               </div>
             )}
             {activeTab === "examples" && (
               <div>
-                <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.6, marginBottom: 12 }}>A minimal Gin server:</p>
-                <div style={{ background: "var(--code-bg)", borderRadius: 10, padding: "16px 20px", overflowX: "auto" }}>
-                  <pre style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 13, color: "var(--code-fg)", lineHeight: 1.7, margin: 0, whiteSpace: "pre" }}>
-{`package main
-
-import "github.com/gin-gonic/gin"
-
-func main() {
-  r := gin.Default()
-  r.GET("/ping", func(c *gin.Context) {
-    c.JSON(200, gin.H{"message": "pong"})
-  })
-  r.Run(":8080")
-}`}
-                  </pre>
-                </div>
+                {examples.length > 0 ? (
+                  <>
+                    <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.6, marginBottom: 12 }}>Examples from this lesson:</p>
+                    {examples.map((example, i) => (
+                      <div key={i} style={{ background: CARD, borderRadius: 10, padding: "16px 20px", border: `1px solid ${BORDER}`, marginBottom: 12 }}>
+                        <pre style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 13, color: "var(--code-fg)", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>
+                          {example}
+                        </pre>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 14, color: FG_MUTED }}>No examples available for this lesson yet.</p>
+                )}
               </div>
             )}
             {activeTab === "notes" && (
@@ -774,12 +756,18 @@ func main() {
             )}
             {activeTab === "quiz" && (
               <div className="flex flex-col gap-3">
-                <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.5 }}>Quick check: what does gin.Default() return?</p>
-                {["A raw HTTP server", "A router with Logger + Recovery middleware", "A database connection", "An HTML template engine"].map((opt, i) => (
-                  <button key={i} style={{ padding: "14px 18px", borderRadius: 10, background: i === 1 ? "rgb(122 158 126 / 0.12)" : CARD, border: i === 1 ? `1.5px solid ${SUCCESS}` : `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left", fontSize: 15, fontWeight: 500, color: FG }}>
-                    {opt}
-                  </button>
-                ))}
+                {quizzes.length > 0 ? quizzes.map((quiz, qi) => (
+                  <div key={qi} className="mb-4">
+                    <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.5, marginBottom: 12 }}>{quiz.question}</p>
+                    {quiz.options.map((opt, i) => (
+                      <button key={i} style={{ padding: "14px 18px", borderRadius: 10, background: i === quiz.correctIndex ? "rgb(122 158 126 / 0.12)" : CARD, border: i === quiz.correctIndex ? `1.5px solid ${SUCCESS}` : `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left", fontSize: 15, fontWeight: 500, color: FG, marginBottom: 8, width: "100%" }}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )) : (
+                  <p style={{ fontSize: 14, color: FG_MUTED }}>No quiz available for this lesson yet.</p>
+                )}
               </div>
             )}
           </div>
@@ -810,7 +798,7 @@ function AiChatScreen({ lesson, onBack }: { lesson: LessonItem; onBack: () => vo
     setMessages((prev) => [
       ...prev,
       { role: "user", text: userMsg },
-      { role: "ai", text: "Great question! In this context, " + userMsg.toLowerCase().replace(/\?$/, "") + " relates to how Gin handles the HTTP request lifecycle." },
+      { role: "ai", text: "Great question! Let me help you understand that concept. Based on the lesson content, here's what you need to know..." },
     ]);
     setInput("");
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
@@ -866,8 +854,8 @@ function AiChatScreen({ lesson, onBack }: { lesson: LessonItem; onBack: () => vo
 function LibraryScreen({ onLesson, onNav }: { onLesson: () => void; onNav: (s: "home" | "learn" | "library" | "profile") => void }) {
   const [tab, setTab] = useState<"inprogress" | "saved">("inprogress");
   const inProgress = [
-    { title: "REST APIs with Go & Gin", pct: 33, nextLesson: "Defining routes and handlers", lessons: "2/6" },
     { title: "English for Beginners", pct: 67, nextLesson: "Shopping and everyday situations", lessons: "2/3" },
+    { title: "Spanish from Zero", pct: 25, nextLesson: "Verbs: ser vs estar", lessons: "1/2" },
   ];
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
@@ -902,7 +890,11 @@ function LibraryScreen({ onLesson, onNav }: { onLesson: () => void; onNav: (s: "
         )}
         {tab === "saved" && (
           <div className="flex flex-col gap-3">
-            {SAVED_LESSONS.map((lesson) => (
+            {[
+              { id: "eb3", title: "Shopping and everyday situations", course: "English for Beginners", duration: "22m" },
+              { id: "sp1", title: "Basic greetings and phrases", course: "Spanish from Zero", duration: "16m" },
+              { id: "sp2", title: "Verbs: ser vs estar", course: "Spanish from Zero", duration: "24m" },
+            ].map((lesson) => (
               <button key={lesson.id} onClick={onLesson} style={{ display: "flex", alignItems: "center", gap: 12, background: CARD, borderRadius: 10, padding: "14px 18px", border: `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill={PRIMARY} stroke={PRIMARY} strokeWidth="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>
                 <div className="flex-1">
@@ -1163,20 +1155,32 @@ function LoginScreen({ onLogin, onBack }: { onLogin: () => void; onBack: () => v
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   Resources screen — browse & read PDFs, download gated by premium
+   Resources screen — browse & read PDFs, download gated by admin settings
    ──────────────────────────────────────────────────────────────────────────── */
 function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: () => void }) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [previewRes, setPreviewRes] = useState<{ id: string; title: string; fileName: string; category: string; pageFlip: boolean; allowDownload: boolean } | null>(null);
+  const [resources, setResources] = useState<{ id: string; title: string; description: string; fileName: string; fileSize: string; category: string; pageFlip: boolean; allowDownload: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const resources = [
-    { id: "r-1", title: "HTML & CSS Cheat Sheet", description: "Quick reference for common HTML elements and CSS properties with examples.", fileName: "html-css-cheatsheet.pdf", fileSize: "1.2 MB", category: "Web Development", pageFlip: true, allowDownload: true },
-    { id: "r-2", title: "JavaScript Promises Guide", description: "Comprehensive guide to understanding and using Promises in JavaScript.", fileName: "js-promises-guide.pdf", fileSize: "890 KB", category: "Web Development", pageFlip: true, allowDownload: false },
-    { id: "r-3", title: "Python Data Science Handbook", description: "Full reference for NumPy, Pandas, Matplotlib, and Scikit-Learn.", fileName: "python-ds-handbook.pdf", fileSize: "4.7 MB", category: "Data Science", pageFlip: true, allowDownload: true },
-    { id: "r-4", title: "System Design Interview Prep", description: "Common system design patterns and interview questions with solutions.", fileName: "system-design-prep.pdf", fileSize: "2.1 MB", category: "Software Engineering", pageFlip: true, allowDownload: false },
-    { id: "r-5", title: "Git Workflow Poster", description: "Visual poster showing common Git branching and merging workflows.", fileName: "git-workflow-poster.pdf", fileSize: "560 KB", category: "Software Engineering", pageFlip: false, allowDownload: true },
-  ];
+  useEffect(() => {
+    fetchResources()
+      .then((data) => {
+        setResources(data.map((r) => ({
+          id: r.id,
+          title: r.title,
+          description: r.description || "",
+          fileName: r.fileName,
+          fileSize: r.fileSize || "",
+          category: r.categoryName || "Uncategorized",
+          pageFlip: r.pageFlipEnabled,
+          allowDownload: r.allowDownload,
+        })));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const categories = ["All", ...Array.from(new Set(resources.map((r) => r.category)))];
   const filtered = resources.filter((r) => {
@@ -1193,7 +1197,7 @@ function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: ()
         <h1 style={{ fontSize: 24, fontWeight: 700, color: FG }}>Resources</h1>
       </div>
       <p style={{ fontSize: 14, color: FG_MUTED, marginBottom: 24 }}>
-        Browse and read PDF guides, cheat sheets, and reference materials.
+        Browse and read PDF guides, cheat sheets, and reference materials uploaded by your instructors.
       </p>
 
       {/* Search & filters */}
@@ -1205,7 +1209,7 @@ function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: ()
           onChange={(e) => setSearch(e.target.value)}
           style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${BORDER}`, background: CARD, color: FG, fontSize: 14, outline: "none" }}
         />
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {categories.map((c) => (
             <button
               key={c}
@@ -1227,49 +1231,57 @@ function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: ()
         </div>
       </div>
 
-      {/* Resource grid */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
-        {filtered.map((r) => (
-          <div
-            key={r.id}
-            style={{ borderRadius: 10, border: `1.5px solid ${BORDER}`, background: CARD, padding: 20, cursor: "pointer", transition: "border-color 0.15s" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = PRIMARY)}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = BORDER)}
-            onClick={() => setPreviewRes(r)}
-          >
-            <div className="flex items-start gap-3 mb-3">
-              <div style={{ width: 44, height: 44, borderRadius: 8, background: SURFACE, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="1.5">
-                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                  <polyline points="14,2 14,8 20,8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                </svg>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: FG, marginBottom: 2 }}>{r.title}</div>
-                <div style={{ fontSize: 12, color: FG_MUTED }}>{r.fileSize} · {r.category}</div>
-              </div>
-              {r.allowDownload && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: SUCCESS, background: "rgb(122 158 126 / 0.15)", padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  Downloadable
-                </span>
-              )}
-              {!r.allowDownload && isPremium && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: SECONDARY, background: "rgb(110 132 160 / 0.15)", padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  Read-only
-                </span>
-              )}
-            </div>
-            <p style={{ fontSize: 13, color: FG_MUTED, lineHeight: 1.5 }}>{r.description}</p>
-          </div>
-        ))}
-      </div>
-
-      {filtered.length === 0 && (
+      {loading ? (
         <div style={{ textAlign: "center", padding: 48 }}>
-          <div style={{ fontSize: 14, color: FG_MUTED }}>No resources found</div>
+          <div style={{ fontSize: 14, color: FG_MUTED }}>Loading resources...</div>
         </div>
+      ) : (
+        <>
+          {/* Resource grid */}
+          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+            {filtered.map((r) => (
+              <div
+                key={r.id}
+                style={{ borderRadius: 10, border: `1.5px solid ${BORDER}`, background: CARD, padding: 20, cursor: "pointer", transition: "border-color 0.15s" }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = PRIMARY)}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = BORDER)}
+                onClick={() => setPreviewRes(r)}
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <div style={{ width: 44, height: 44, borderRadius: 8, background: SURFACE, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={PRIMARY} strokeWidth="1.5">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                      <polyline points="14,2 14,8 20,8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: FG, marginBottom: 2 }}>{r.title}</div>
+                    <div style={{ fontSize: 12, color: FG_MUTED }}>{r.fileSize && `${r.fileSize} · `}{r.category}</div>
+                  </div>
+                  {r.allowDownload && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: SUCCESS, background: "rgb(122 158 126 / 0.15)", padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Downloadable
+                    </span>
+                  )}
+                  {!r.allowDownload && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: SECONDARY, background: "rgb(110 132 160 / 0.15)", padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Read-only
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: 13, color: FG_MUTED, lineHeight: 1.5 }}>{r.description}</p>
+              </div>
+            ))}
+          </div>
+
+          {filtered.length === 0 && (
+            <div style={{ textAlign: "center", padding: 48 }}>
+              <div style={{ fontSize: 14, color: FG_MUTED }}>No resources found</div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Preview modal */}
@@ -1285,19 +1297,19 @@ function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: ()
                 <div style={{ fontSize: 12, color: FG_MUTED }}>{previewRes.fileName}</div>
               </div>
               <div className="flex gap-2">
-                {previewRes.allowDownload || isPremium ? (
+                {previewRes.allowDownload ? (
                   <button
                     style={{ padding: "8px 16px", borderRadius: 8, background: PRIMARY, color: ON_PRIMARY, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                    onClick={() => alert(previewRes.allowDownload ? "Downloading PDF..." : "Premium feature — subscribe to download")}
+                    onClick={() => alert("Downloading PDF...")}
                   >
-                    {previewRes.allowDownload ? "Download PDF" : "Download (Premium)"}
+                    Download PDF
                   </button>
                 ) : (
                   <button
                     style={{ padding: "8px 16px", borderRadius: 8, background: SECONDARY, color: ON_SECONDARY, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                    onClick={() => alert("Subscribe to download this resource")}
+                    onClick={() => alert("Download not available for this resource")}
                   >
-                    Subscribe to Download
+                    Read Only
                   </button>
                 )}
                 <button
@@ -1334,19 +1346,21 @@ function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: ()
 export default function App() {
   const [nav, setNav] = useState<NavState>({ screen: "welcome" });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+
+  useEffect(() => {
+    loadCategories().then(setCategories).catch(console.error);
+  }, []);
 
   const go = (screen: Screen, extra?: Partial<NavState>) => setNav((n) => ({ ...n, screen, ...extra }));
 
   const handleBottomNav = (tab: "home" | "learn" | "library" | "profile" | "resources") => {
     if (tab === "home") go("home");
-    else if (tab === "learn") go("category", { category: CATEGORIES[0] });
+    else if (tab === "learn") go("category", { category: categories[0] });
     else if (tab === "library") go("library");
     else if (tab === "profile") go("profile");
     else if (tab === "resources") go("resources");
   };
-
-  const defaultCourse = getCourse("go-gin")!;
-  const defaultLesson = defaultCourse.lessons[2];
 
   const isWelcome = nav.screen === "welcome" || nav.screen === "interests" || nav.screen === "login";
 
@@ -1367,9 +1381,9 @@ export default function App() {
       case "course":
         return nav.course ? <CourseScreen course={nav.course} onBack={() => go("subcategory")} onLesson={(lesson) => go("lesson", { lesson })} /> : null;
       case "lesson":
-        return <LessonScreen lesson={nav.lesson ?? defaultLesson} course={nav.course ?? defaultCourse} onBack={() => go(nav.course ? "course" : "home")} onAiChat={() => go("ai-chat")} />;
+        return nav.lesson ? <LessonScreen lesson={nav.lesson} course={nav.course!} onBack={() => go(nav.course ? "course" : "home")} onAiChat={() => go("ai-chat")} /> : null;
       case "ai-chat":
-        return <AiChatScreen lesson={nav.lesson ?? defaultLesson} onBack={() => go("lesson")} />;
+        return nav.lesson ? <AiChatScreen lesson={nav.lesson} onBack={() => go("lesson")} /> : null;
       case "library":
         return <LibraryScreen onLesson={() => go("lesson")} onNav={handleBottomNav} />;
       case "resources":

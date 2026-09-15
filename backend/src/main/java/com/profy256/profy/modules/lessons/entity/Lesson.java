@@ -1,6 +1,8 @@
 package com.profy256.profy.modules.lessons.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -27,15 +29,22 @@ public class Lesson {
     @Column(columnDefinition = "text")
     private String explanation;
 
+    // jsonb columns: the JdbcTypeCode annotation makes Hibernate bind these as JSON
+    // (a plain String mapping sends VARCHAR and Postgres rejects the insert with
+    // "column ... is of type jsonb but expression is of type character varying").
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String objectives;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String examples;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String exercises;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String quizzes;
 
