@@ -13,10 +13,10 @@ export default function CampusLibraryManager() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "free" | "premium">("all");
 
-  const fetchBooks = useCallback(async (p: number, q: string) => {
+  const fetchBooks = useCallback(async (p: number, q: string, f: string) => {
     try {
       setLoading(true);
-      const data: CampusBookListApi = await api.campusBooks.list({ page: p, limit: 20, search: q || undefined });
+      const data: CampusBookListApi = await api.campusBooks.list({ page: p, limit: 20, search: q || undefined, filter: f });
       setBooks(data.books);
       setTotalPages(data.totalPages);
       setTotal(data.total);
@@ -27,14 +27,14 @@ export default function CampusLibraryManager() {
     }
   }, []);
 
-  useEffect(() => { fetchBooks(page, search); }, [page, search, fetchBooks]);
+  useEffect(() => { fetchBooks(page, search, filter); }, [page, search, filter, fetchBooks]);
 
   const handleSync = async () => {
     setSyncing(true);
     try {
       const result = await api.campusBooks.sync();
       alert(result.message);
-      fetchBooks(page, search);
+      fetchBooks(page, search, filter);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Sync failed");
     } finally {
@@ -63,12 +63,6 @@ export default function CampusLibraryManager() {
       alert(err instanceof Error ? err.message : "Failed to update");
     }
   };
-
-  const filtered = books.filter((b) => {
-    if (filter === "premium") return b.isPremium;
-    if (filter === "free") return !b.isPremium;
-    return true;
-  });
 
   const inputStyle = {
     border: "1px solid var(--border)",
@@ -131,7 +125,7 @@ export default function CampusLibraryManager() {
       <div className="flex-1 scrollable px-6 py-4">
         {loading ? (
           <div className="py-12 text-center font-mono text-xs" style={{ color: "var(--text-3)" }}>Loading books...</div>
-        ) : filtered.length === 0 ? (
+        ) : books.length === 0 ? (
           <div className="py-12 text-center">
             <div className="font-mono text-xs tracking-widest mb-2" style={{ color: "var(--text-3)" }}>NO BOOKS FOUND</div>
             <div className="text-sm" style={{ color: "var(--text-faint)" }}>
@@ -140,7 +134,7 @@ export default function CampusLibraryManager() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((book) => (
+            {books.map((book) => (
               <div
                 key={book.campusBookId}
                 className="rounded-sm overflow-hidden transition-all"

@@ -80,7 +80,9 @@ public class CampusLibraryService {
 
         // Fallback: serve from local DB cache
         books = listFromLocalCache(page, limit, category, search);
-        return new CampusBookListResponse(books, page, limit, books.size(), 1);
+        long totalCount = bookRepository.count();
+        int totalPages = (int) Math.ceil((double) totalCount / limit);
+        return new CampusBookListResponse(books, page, limit, totalCount, totalPages);
     }
 
     // ── Public: get single book ────────────────────────────
@@ -146,6 +148,7 @@ public class CampusLibraryService {
         int page = 1;
         int pageSize = 100;
         boolean hasMore = true;
+        Set<String> remoteIds = new HashSet<>();
 
         while (hasMore) {
             CampusLibraryResponse response = client.listBooks(page, pageSize, null, null);
@@ -155,6 +158,7 @@ public class CampusLibraryService {
             }
 
             for (CampusLibraryBook book : response.books()) {
+                remoteIds.add(book.id());
                 Optional<CampusBook> existing = bookRepository.findByCampusBookId(book.id());
                 if (existing.isPresent()) {
                     updateBookEntity(existing.get(), book);
@@ -173,20 +177,10 @@ public class CampusLibraryService {
 
         // Remove books no longer in CampusLibrary
         List<CampusBook> localBooks = bookRepository.findAll();
-        Set<String> remoteIds = new HashSet<>();
-        for (int p = 1; p < page; p++) {
-            CampusLibraryResponse r = client.listBooks(p, pageSize, null, null);
-            if (r.books() != null) {
-                r.books().forEach(b -> remoteIds.add(b.id()));
-            }
-        }
-
-        if (!remoteIds.isEmpty()) {
-            for (CampusBook local : localBooks) {
-                if (!remoteIds.contains(local.getCampusBookId())) {
-                    bookRepository.delete(local);
-                    removed++;
-                }
+        for (CampusBook local : localBooks) {
+            if (!remoteIds.contains(local.getCampusBookId())) {
+                bookRepository.delete(local);
+                removed++;
             }
         }
 

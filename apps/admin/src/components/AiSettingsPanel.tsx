@@ -50,7 +50,8 @@ export default function AiSettingsPanel() {
   const handleSave = async () => {
     try {
       if (editingId) {
-        await api.aiProviders.update(editingId, form);
+        const payload = form.apiKey ? form : { ...form, apiKey: undefined };
+        await api.aiProviders.update(editingId, payload);
       } else {
         await api.aiProviders.create(form);
       }

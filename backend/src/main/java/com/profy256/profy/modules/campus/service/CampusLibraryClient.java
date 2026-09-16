@@ -5,7 +5,6 @@ import com.profy256.profy.modules.campus.dto.CampusBookDto.CampusLibraryCategory
 import com.profy256.profy.modules.campus.dto.CampusBookDto.CampusLibraryPagination;
 import com.profy256.profy.modules.campus.dto.CampusBookDto.CampusLibraryResponse;
 import com.profy256.profy.platform.config.AppConfig;
-import com.profy256.profy.platform.error.AiUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;

@@ -151,11 +151,12 @@ export const api = {
   },
 
   campusBooks: {
-    list: (params: { page?: number; limit?: number; search?: string } = {}) => {
+    list: (params: { page?: number; limit?: number; search?: string; filter?: string } = {}) => {
       const qs = new URLSearchParams();
       if (params.page) qs.set("page", String(params.page));
       if (params.limit) qs.set("limit", String(params.limit));
       if (params.search) qs.set("search", params.search);
+      if (params.filter && params.filter !== "all") qs.set("filter", params.filter);
       return request<CampusBookListApi>(`/api/v1/admin/campus-books?${qs.toString()}`);
     },
     updateSettings: (campusBookId: string, data: { isPremium?: boolean; isFeatured?: boolean; customNote?: string }) =>

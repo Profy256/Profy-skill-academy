@@ -7,12 +7,13 @@ import TaxonomyManager from "@/components/TaxonomyManager";
 import LessonEditor from "@/components/LessonEditor";
 import ResourcesManager from "@/components/ResourcesManager";
 import ReviewDashboard from "@/components/ReviewDashboard";
+import CampusLibraryManager from "@/components/CampusLibraryManager";
 import AiAssistant from "@/components/AiAssistant";
 import AiSettingsPanel from "@/components/AiSettingsPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import { getToken } from "@/lib/api";
 
-type View = "taxonomy" | "lesson-editor" | "resources" | "review" | "ai-assistant" | "ai-settings";
+type View = "taxonomy" | "lesson-editor" | "resources" | "review" | "campus-library" | "ai-assistant" | "ai-settings";
 
 export default function App() {
   const [authed, setAuthed] = useState(false);
@@ -43,6 +44,7 @@ export default function App() {
               {view === "lesson-editor" && "Lesson Editor"}
               {view === "resources" && "Resources"}
               {view === "review" && "Review Queue"}
+              {view === "campus-library" && "Campus Library"}
               {view === "ai-assistant" && "AI Assistant"}
               {view === "ai-settings" && "AI Provider Settings"}
             </span>
@@ -60,6 +62,7 @@ export default function App() {
           {view === "lesson-editor" && <LessonEditor />}
           {view === "resources" && <ResourcesManager />}
           {view === "review" && <ReviewDashboard />}
+          {view === "campus-library" && <CampusLibraryManager />}
           {view === "ai-assistant" && <AiAssistant />}
           {view === "ai-settings" && <AiSettingsPanel />}
         </div>

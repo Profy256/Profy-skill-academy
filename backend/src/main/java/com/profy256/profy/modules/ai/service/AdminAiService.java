@@ -7,7 +7,6 @@ import com.profy256.profy.modules.ai.dto.AiProviderDto.TestProviderRequest;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.TestProviderResponse;
 import com.profy256.profy.modules.ai.service.LLMProvider.ChatMessage;
 import com.profy256.profy.modules.ai.service.LLMProvider.ChatResponse;
-import com.profy256.profy.modules.lessons.dto.LessonRequests.CreateLessonRequest;
 import com.profy256.profy.modules.lessons.entity.Lesson;
 import com.profy256.profy.modules.lessons.repository.LessonRepository;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.TaxonomyCreateRequest;
@@ -278,7 +277,6 @@ public class AdminAiService {
         return null;
     }
 
-    @Transactional
     private AdminChatResponse executeCreateCategory(JsonNode params) {
         String name = params.path("name").asText();
         String slug = slugify(name);
@@ -292,7 +290,6 @@ public class AdminAiService {
         return new AdminChatResponse(msg, "create_category", Map.of("id", node.getId(), "name", name, "slug", slug));
     }
 
-    @Transactional
     private AdminChatResponse executeCreateSubcategory(JsonNode params) {
         String parentSlug = params.path("parentSlug").asText();
         TaxonomyNode parent = taxonomyNodeRepository.findBySlug(parentSlug)
@@ -310,7 +307,6 @@ public class AdminAiService {
         return new AdminChatResponse(msg, "create_subcategory", Map.of("id", node.getId(), "name", name, "slug", slug));
     }
 
-    @Transactional
     private AdminChatResponse executeCreateCourse(JsonNode params) {
         String parentSlug = params.path("parentSlug").asText();
         TaxonomyNode parent = taxonomyNodeRepository.findBySlug(parentSlug)
@@ -328,7 +324,6 @@ public class AdminAiService {
         return new AdminChatResponse(msg, "create_course", Map.of("id", node.getId(), "name", name, "slug", slug));
     }
 
-    @Transactional
     private AdminChatResponse executeCreateLesson(JsonNode params) {
         String courseSlug = params.path("courseSlug").asText();
         TaxonomyNode course = taxonomyNodeRepository.findBySlug(courseSlug)
@@ -343,7 +338,7 @@ public class AdminAiService {
         lesson.setSlug(slug);
         lesson.setDescription(params.path("description").asText(""));
         lesson.setExplanation(params.path("explanation").asText(""));
-        lesson.setObjectives(params.path("exercises").toString());
+        lesson.setObjectives(params.path("objectives").toString());
         lesson.setExamples(params.path("examples").toString());
         lesson.setExercises(params.path("exercises").toString());
         lesson.setQuizzes(params.path("quizzes").toString());

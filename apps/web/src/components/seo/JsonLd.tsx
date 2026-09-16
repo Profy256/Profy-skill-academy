@@ -1,3 +1,5 @@
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://profyskillacademy.com";
+
 interface JsonLdProps {
   data: Record<string, unknown>;
 }
@@ -16,8 +18,8 @@ export function OrganizationJsonLd() {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "Profy Skill Academy",
-    url: "https://profyskillacademy.com",
-    logo: "https://profyskillacademy.com/logo.png",
+    url: SITE_URL,
+    logo: `${SITE_URL}/logo.png`,
     description: "Learn programming, languages, and professional skills with expert-led courses and AI-powered tutoring.",
     sameAs: [
       "https://twitter.com/profyskillacademy",
@@ -37,12 +39,12 @@ export function WebsiteJsonLd() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "Profy Skill Academy",
-    url: "https://profyskillacademy.com",
+    url: SITE_URL,
     potentialAction: {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: "https://profyskillacademy.com/search?q={search_term_string}",
+        urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
       },
       "query-input": "required name=search_term_string",
     },

@@ -64,10 +64,9 @@ public class GeminiProvider implements LLMProvider {
                 List<Map<String, Object>> candidates = (List<Map<String, Object>>) response.getBody().get("candidates");
                 if (candidates != null && !candidates.isEmpty()) {
                     Map<String, Object> candidate = candidates.get(0);
-                    List<Map<String, Object>> parts = (List<Map<String, Object>>) candidate.get("content");
-                    if (parts != null) {
-                        Map<String, Object> content = parts.get(0);
-                        List<Map<String, Object>> partList = (List<Map<String, Object>>) content.get("parts");
+                    Map<String, Object> contentMap = (Map<String, Object>) candidate.get("content");
+                    if (contentMap != null) {
+                        List<Map<String, Object>> partList = (List<Map<String, Object>>) contentMap.get("parts");
                         if (partList != null && !partList.isEmpty()) {
                             return new ChatResponse(partList.get(0).get("text").toString());
                         }

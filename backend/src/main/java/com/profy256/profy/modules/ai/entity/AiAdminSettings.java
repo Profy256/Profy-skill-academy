@@ -17,6 +17,11 @@ public class AiAdminSettings {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @PrePersist
+    protected void onCreate() {
+        this.updatedAt = Instant.now();
+    }
+
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = Instant.now();
