@@ -57,6 +57,7 @@ public class CampusBookDto {
             Double rating,
             Integer ratingCount,
             boolean isPremium,
+            boolean isFeatured,
             boolean isAvailable,
             String customNote
     ) {}

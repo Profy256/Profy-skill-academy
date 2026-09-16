@@ -220,6 +220,7 @@ public class CampusLibraryService {
 
     private CampusBookResponse toResponse(CampusLibraryBook book) {
         boolean isPremium = settingsRepository.existsByCampusBookIdAndIsPremiumTrue(book.id());
+        boolean isFeatured = settingsRepository.existsByCampusBookIdAndIsFeaturedTrue(book.id());
         CampusBookSettings settings = settingsRepository.findByCampusBookId(book.id()).orElse(null);
 
         return new CampusBookResponse(
@@ -238,6 +239,7 @@ public class CampusLibraryService {
                 book.rating(),
                 book.ratingCount() != null ? book.ratingCount() : 0,
                 isPremium,
+                isFeatured,
                 book.isAvailable() != null ? book.isAvailable() : true,
                 settings != null ? settings.getCustomNote() : null
         );
@@ -245,6 +247,7 @@ public class CampusLibraryService {
 
     private CampusBookResponse toResponseFromEntity(CampusBook book) {
         boolean isPremium = settingsRepository.existsByCampusBookIdAndIsPremiumTrue(book.getCampusBookId());
+        boolean isFeatured = settingsRepository.existsByCampusBookIdAndIsFeaturedTrue(book.getCampusBookId());
         CampusBookSettings settings = settingsRepository.findByCampusBookId(book.getCampusBookId()).orElse(null);
 
         List<String> formats = List.of("pdf");
@@ -271,6 +274,7 @@ public class CampusLibraryService {
                 book.getRating() != null ? book.getRating().doubleValue() : null,
                 book.getRatingCount(),
                 isPremium,
+                isFeatured,
                 book.getIsAvailable(),
                 settings != null ? settings.getCustomNote() : null
         );

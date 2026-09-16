@@ -326,6 +326,7 @@ export interface CampusBookApi {
   rating: number | null;
   ratingCount: number;
   isPremium: boolean;
+  isFeatured: boolean;
   isAvailable: boolean;
   customNote: string | null;
 }

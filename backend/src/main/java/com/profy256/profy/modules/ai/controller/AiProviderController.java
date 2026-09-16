@@ -7,6 +7,7 @@ import com.profy256.profy.modules.ai.dto.AiProviderDto.TestProviderRequest;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.TestProviderResponse;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.UpdateProviderRequest;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.UpdateSettingsRequest;
+import com.profy256.profy.modules.ai.service.AdminAiService;
 import com.profy256.profy.modules.ai.service.AiProviderService;
 import com.profy256.profy.platform.audit.Audited;
 import jakarta.validation.Valid;
@@ -23,9 +24,11 @@ import java.util.UUID;
 public class AiProviderController {
 
     private final AiProviderService providerService;
+    private final AdminAiService adminAiService;
 
-    public AiProviderController(AiProviderService providerService) {
+    public AiProviderController(AiProviderService providerService, AdminAiService adminAiService) {
         this.providerService = providerService;
+        this.adminAiService = adminAiService;
     }
 
     @GetMapping
@@ -72,6 +75,6 @@ public class AiProviderController {
 
     @PostMapping("/test")
     public ResponseEntity<TestProviderResponse> test(@Valid @RequestBody TestProviderRequest request) {
-        return ResponseEntity.ok(providerService.testProvider(request));
+        return ResponseEntity.ok(adminAiService.testProvider(request));
     }
 }
