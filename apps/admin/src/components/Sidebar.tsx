@@ -1,4 +1,4 @@
-type View = "taxonomy" | "lesson-editor" | "resources" | "review";
+type View = "taxonomy" | "lesson-editor" | "resources" | "review" | "ai-assistant" | "ai-settings";
 
 interface Props {
   activeView: View;
@@ -41,11 +41,35 @@ const IconShield = () => (
   </svg>
 );
 
-const navItems = [
+const IconBot = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <rect x="3" y="2" width="8" height="9" rx="1.5" stroke="currentColor" strokeWidth="1" />
+    <circle cx="5.5" cy="6" r="1" fill="currentColor" />
+    <circle cx="8.5" cy="6" r="1" fill="currentColor" />
+    <line x1="7" y1="11" x2="7" y2="13" stroke="currentColor" strokeWidth="1" />
+    <line x1="5" y1="13" x2="9" y2="13" stroke="currentColor" strokeWidth="1" />
+    <line x1="3" y1="5" x2="1" y2="5" stroke="currentColor" strokeWidth="1" />
+    <line x1="11" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1" />
+  </svg>
+);
+
+const IconGear = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1" />
+    <path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.8 2.8l1.4 1.4M9.8 9.8l1.4 1.4M11.2 2.8l-1.4 1.4M4.2 9.8l-1.4 1.4" stroke="currentColor" strokeWidth="1" />
+  </svg>
+);
+
+const contentTools = [
   { id: "taxonomy" as View, label: "Taxonomy Manager", Icon: IconTree },
   { id: "lesson-editor" as View, label: "Lesson Editor", Icon: IconDoc },
   { id: "resources" as View, label: "Resources", Icon: IconFile },
   { id: "review" as View, label: "Review Queue", Icon: IconShield },
+];
+
+const aiTools = [
+  { id: "ai-assistant" as View, label: "AI Assistant", Icon: IconBot },
+  { id: "ai-settings" as View, label: "AI Settings", Icon: IconGear },
 ];
 
 export default function Sidebar({ activeView, onNavigate, onLogout }: Props) {
@@ -66,7 +90,44 @@ export default function Sidebar({ activeView, onNavigate, onLogout }: Props) {
             TOOLS
           </span>
         </div>
-        {navItems.map(({ id, label, Icon }) => {
+        {contentTools.map(({ id, label, Icon }) => {
+          const active = activeView === id;
+          return (
+            <button
+              key={id}
+              onClick={() => onNavigate(id)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all"
+              style={{
+                background: active ? "#1f1f1f" : "transparent",
+                color: active ? "#e5e5e5" : "#6b6b6b",
+                borderLeft: active ? "2px solid #f59e0b" : "2px solid transparent",
+                borderRadius: "2px",
+              }}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = "#9a9a9a";
+                  e.currentTarget.style.background = "#1a1a1a";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.color = "#6b6b6b";
+                  e.currentTarget.style.background = "transparent";
+                }
+              }}
+            >
+              <Icon />
+              <span className="font-mono text-xs flex-1">{label}</span>
+            </button>
+          );
+        })}
+
+        <div className="px-3 pt-4 pb-1.5">
+          <span className="font-mono text-xs" style={{ color: "#4a4a4a" }}>
+            AI
+          </span>
+        </div>
+        {aiTools.map(({ id, label, Icon }) => {
           const active = activeView === id;
           return (
             <button

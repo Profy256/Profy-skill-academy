@@ -123,6 +123,46 @@ export const api = {
     delete: (id: string) =>
       request<{ status: string }>(`/api/v1/admin/resources/${id}`, { method: "DELETE" }),
   },
+
+  aiProviders: {
+    list: () =>
+      request<AiProviderApi[]>("/api/v1/admin/ai-providers"),
+    get: (id: string) =>
+      request<AiProviderApi>(`/api/v1/admin/ai-providers/${id}`),
+    create: (data: { name: string; providerType: string; apiKey: string; baseUrl: string; defaultModel: string }) =>
+      request<AiProviderApi>("/api/v1/admin/ai-providers", { method: "POST", body: data }),
+    update: (id: string, data: { name?: string; providerType?: string; apiKey?: string; baseUrl?: string; defaultModel?: string; isActive?: boolean }) =>
+      request<AiProviderApi>(`/api/v1/admin/ai-providers/${id}`, { method: "PUT", body: data }),
+    delete: (id: string) =>
+      request<{ status: string }>(`/api/v1/admin/ai-providers/${id}`, { method: "DELETE" }),
+    getSettings: () =>
+      request<AiSettingsApi>("/api/v1/admin/ai-providers/settings"),
+    updateSettings: (data: { activeProviderId: string | null }) =>
+      request<AiSettingsApi>("/api/v1/admin/ai-providers/settings", { method: "PUT", body: data }),
+    test: (message: string) =>
+      request<AiTestResultApi>("/api/v1/admin/ai-providers/test", { method: "POST", body: { message } }),
+  },
+
+  aiAssistant: {
+    chat: (message: string) =>
+      request<AiAssistantResponse>("/api/v1/admin/ai-assistant/chat", { method: "POST", body: { message } }),
+    test: (message: string) =>
+      request<AiTestResultApi>("/api/v1/admin/ai-assistant/test", { method: "POST", body: { message } }),
+  },
+
+  campusBooks: {
+    list: (params: { page?: number; limit?: number; search?: string } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set("page", String(params.page));
+      if (params.limit) qs.set("limit", String(params.limit));
+      if (params.search) qs.set("search", params.search);
+      return request<CampusBookListApi>(`/api/v1/admin/campus-books?${qs.toString()}`);
+    },
+    updateSettings: (campusBookId: string, data: { isPremium?: boolean; isFeatured?: boolean; customNote?: string }) =>
+      request<{ status: string }>(`/api/v1/admin/campus-books/${campusBookId}/settings`, { method: "PUT", body: data }),
+    sync: () =>
+      request<CampusBookSyncResult>("/api/v1/admin/campus-books/sync", { method: "POST" }),
+  },
 };
 
 // API Types
@@ -241,4 +281,66 @@ export interface LessonCreateRequest {
   level?: string;
   status?: string;
   sortOrder?: number;
+}
+
+export interface AiProviderApi {
+  id: string;
+  name: string;
+  providerType: string;
+  baseUrl: string;
+  defaultModel: string;
+  isActive: boolean;
+  apiKeyMasked: string;
+}
+
+export interface AiSettingsApi {
+  activeProviderId: string | null;
+  activeProviderName: string | null;
+}
+
+export interface AiTestResultApi {
+  success: boolean;
+  response: string | null;
+  error: string | null;
+}
+
+export interface AiAssistantResponse {
+  content: string;
+  actionType: string | null;
+  actionResult: Record<string, unknown> | null;
+}
+
+export interface CampusBookApi {
+  id: string | null;
+  campusBookId: string;
+  title: string;
+  author: string;
+  description: string | null;
+  coverUrl: string | null;
+  category: string | null;
+  categorySlug: string | null;
+  language: string;
+  pageCount: number | null;
+  publishedYear: number | null;
+  formats: string[];
+  rating: number | null;
+  ratingCount: number;
+  isPremium: boolean;
+  isAvailable: boolean;
+  customNote: string | null;
+}
+
+export interface CampusBookListApi {
+  books: CampusBookApi[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface CampusBookSyncResult {
+  added: number;
+  updated: number;
+  removed: number;
+  message: string;
 }

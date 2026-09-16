@@ -7,10 +7,12 @@ import TaxonomyManager from "@/components/TaxonomyManager";
 import LessonEditor from "@/components/LessonEditor";
 import ResourcesManager from "@/components/ResourcesManager";
 import ReviewDashboard from "@/components/ReviewDashboard";
+import AiAssistant from "@/components/AiAssistant";
+import AiSettingsPanel from "@/components/AiSettingsPanel";
 import ThemeToggle from "@/components/ThemeToggle";
 import { getToken } from "@/lib/api";
 
-type View = "taxonomy" | "lesson-editor" | "resources" | "review";
+type View = "taxonomy" | "lesson-editor" | "resources" | "review" | "ai-assistant" | "ai-settings";
 
 export default function App() {
   const [authed, setAuthed] = useState(false);
@@ -41,12 +43,14 @@ export default function App() {
               {view === "lesson-editor" && "Lesson Editor"}
               {view === "resources" && "Resources"}
               {view === "review" && "Review Queue"}
+              {view === "ai-assistant" && "AI Assistant"}
+              {view === "ai-settings" && "AI Provider Settings"}
             </span>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <ThemeToggle />
             <div className="font-mono text-xs" style={{ color: "var(--text-faint)" }}>
-              profy-cms v2.5 — Sep 2026
+              profy-cms v3.0 — Sep 2026
             </div>
           </div>
         </div>
@@ -56,6 +60,8 @@ export default function App() {
           {view === "lesson-editor" && <LessonEditor />}
           {view === "resources" && <ResourcesManager />}
           {view === "review" && <ReviewDashboard />}
+          {view === "ai-assistant" && <AiAssistant />}
+          {view === "ai-settings" && <AiSettingsPanel />}
         </div>
       </main>
     </div>

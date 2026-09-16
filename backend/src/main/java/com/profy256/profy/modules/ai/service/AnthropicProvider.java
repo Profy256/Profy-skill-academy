@@ -13,12 +13,12 @@ import java.time.Duration;
 import java.util.*;
 
 @Component
-public class OpenAiCompatibleProvider implements LLMProvider {
+public class AnthropicProvider implements LLMProvider {
 
-    private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleProvider.class);
+    private static final Logger log = LoggerFactory.getLogger(AnthropicProvider.class);
     private final RestTemplate restTemplate;
 
-    public OpenAiCompatibleProvider() {
+    public AnthropicProvider() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(10));
         requestFactory.setReadTimeout(Duration.ofSeconds(30));
@@ -27,7 +27,7 @@ public class OpenAiCompatibleProvider implements LLMProvider {
 
     @Override
     public ChatResponse complete(List<ChatMessage> messages, String systemPrompt) {
-        throw new AiUnavailableException("Use complete(messages, systemPrompt, apiKey, baseUrl, model) for multi-provider");
+        return complete(messages, systemPrompt, null, null, null);
     }
 
     public ChatResponse complete(List<ChatMessage> messages, String systemPrompt,
@@ -35,46 +35,43 @@ public class OpenAiCompatibleProvider implements LLMProvider {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
+            headers.set("x-api-key", apiKey);
+            headers.set("anthropic-version", "2023-06-01");
 
             List<Map<String, String>> apiMessages = new ArrayList<>();
-            apiMessages.add(Map.of("role", "system", "content", systemPrompt));
             for (ChatMessage msg : messages) {
                 apiMessages.add(Map.of("role", msg.role(), "content", msg.content()));
             }
 
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
-            body.put("messages", apiMessages);
-            body.put("temperature", 0.7);
             body.put("max_tokens", 2048);
+            body.put("system", systemPrompt);
+            body.put("messages", apiMessages);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-            String url = baseUrl.replaceAll("/+$", "") + "/chat/completions";
+            String url = baseUrl.replaceAll("/+$", "") + "/messages";
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) response.getBody().get("choices");
-                if (choices != null && !choices.isEmpty()) {
-                    Map<String, Object> choice = choices.get(0);
-                    Map<String, Object> message = (Map<String, Object>) choice.get("message");
-                    if (message != null && message.get("content") != null) {
-                        return new ChatResponse(message.get("content").toString());
-                    }
+                List<Map<String, Object>> content = (List<Map<String, Object>>) response.getBody().get("content");
+                if (content != null && !content.isEmpty()) {
+                    String text = content.get(0).get("text").toString();
+                    return new ChatResponse(text);
                 }
-                throw new AiUnavailableException("Unexpected AI response format");
+                throw new AiUnavailableException("Unexpected Anthropic response format");
             } else {
-                throw new AiUnavailableException("AI API returned status: " + response.getStatusCode());
+                throw new AiUnavailableException("Anthropic API returned status: " + response.getStatusCode());
             }
         } catch (ResourceAccessException e) {
-            log.error("AI provider unreachable: {}", e.getMessage());
-            throw new AiUnavailableException("AI service is temporarily unavailable");
+            log.error("Anthropic provider unreachable: {}", e.getMessage());
+            throw new AiUnavailableException("Anthropic service is temporarily unavailable");
         } catch (AiUnavailableException e) {
             throw e;
         } catch (Exception e) {
-            log.error("AI provider error: {}", e.getMessage());
-            throw new AiUnavailableException("AI service encountered an error");
+            log.error("Anthropic provider error: {}", e.getMessage());
+            throw new AiUnavailableException("Anthropic service encountered an error");
         }
     }
 }

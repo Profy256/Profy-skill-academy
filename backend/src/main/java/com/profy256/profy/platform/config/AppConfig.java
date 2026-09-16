@@ -31,6 +31,13 @@ public class AppConfig {
     // Mobile (RevenueCat)
     private String revenuecatWebhookAuth = "";
 
+    // CampusLibrary
+    private String campusLibraryBaseUrl = "https://campuslibrary.xyz";
+    private String campusLibraryApiKey = "";
+
+    // AI encryption key for DB-stored API keys (AES-256, base64-encoded)
+    private String aiEncryptionKey = "";
+
     // Other
     private String youtubeApiKey = "";
     private String webOrigin = "";
@@ -80,6 +87,15 @@ public class AppConfig {
 
     public String getRevenuecatWebhookAuth() { return revenuecatWebhookAuth; }
     public void setRevenuecatWebhookAuth(String revenuecatWebhookAuth) { this.revenuecatWebhookAuth = revenuecatWebhookAuth; }
+
+    public String getCampusLibraryBaseUrl() { return campusLibraryBaseUrl; }
+    public void setCampusLibraryBaseUrl(String campusLibraryBaseUrl) { this.campusLibraryBaseUrl = campusLibraryBaseUrl; }
+
+    public String getCampusLibraryApiKey() { return campusLibraryApiKey; }
+    public void setCampusLibraryApiKey(String campusLibraryApiKey) { this.campusLibraryApiKey = campusLibraryApiKey; }
+
+    public String getAiEncryptionKey() { return aiEncryptionKey; }
+    public void setAiEncryptionKey(String aiEncryptionKey) { this.aiEncryptionKey = aiEncryptionKey; }
 
     public String getYoutubeApiKey() { return youtubeApiKey; }
     public void setYoutubeApiKey(String youtubeApiKey) { this.youtubeApiKey = youtubeApiKey; }

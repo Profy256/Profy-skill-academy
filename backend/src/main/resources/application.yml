@@ -73,6 +73,13 @@ profy:
   # ── Mobile (RevenueCat for iOS/Android) ──────────────────────
   revenuecat-webhook-auth: ${REVENUECAT_WEBHOOK_AUTH:}
 
+  # ── CampusLibrary ──────────────────────────────────────────
+  campus-library-base-url: ${CAMPUS_LIBRARY_BASE_URL:https://campuslibrary.xyz}
+  campus-library-api-key: ${CAMPUS_LIBRARY_API_KEY:}
+
+  # ── AI Encryption (for DB-stored API keys) ─────────────────
+  ai-encryption-key: ${PROFY_AI_ENCRYPTION_KEY:}
+
   # ── Other ────────────────────────────────────────────────────
   youtube-api-key: ${YOUTUBE_API_KEY:}
   web-origin: ${WEB_ORIGIN:}

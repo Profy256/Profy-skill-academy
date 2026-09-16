@@ -8,6 +8,7 @@ import com.profy256.profy.modules.ai.entity.AiChatSession;
 import com.profy256.profy.modules.ai.repository.AiChatMessageRepository;
 import com.profy256.profy.modules.ai.repository.AiChatSessionRepository;
 import com.profy256.profy.modules.ai.service.LLMProvider.ChatMessage;
+import com.profy256.profy.modules.ai.service.LLMProvider.ChatResponse;
 import com.profy256.profy.modules.billing.repository.SubscriptionRepository;
 import com.profy256.profy.modules.lessons.entity.Lesson;
 import com.profy256.profy.modules.lessons.repository.LessonRepository;
@@ -42,7 +43,10 @@ public class AiService {
     private final AiChatMessageRepository messageRepository;
     private final LessonRepository lessonRepository;
     private final SubscriptionRepository subscriptionRepository;
-    private final LLMProvider llmProvider;
+    private final AiProviderService providerService;
+    private final OpenAiCompatibleProvider openAiProvider;
+    private final AnthropicProvider anthropicProvider;
+    private final GeminiProvider geminiProvider;
     private final AppConfig appConfig;
     private final StringRedisTemplate redisTemplate;
     private final CircuitBreaker circuitBreaker;
@@ -51,7 +55,10 @@ public class AiService {
                      AiChatMessageRepository messageRepository,
                      LessonRepository lessonRepository,
                      SubscriptionRepository subscriptionRepository,
-                     LLMProvider llmProvider,
+                     AiProviderService providerService,
+                     OpenAiCompatibleProvider openAiProvider,
+                     AnthropicProvider anthropicProvider,
+                     GeminiProvider geminiProvider,
                      AppConfig appConfig,
                      StringRedisTemplate redisTemplate,
                      CircuitBreaker circuitBreaker) {
@@ -59,7 +66,10 @@ public class AiService {
         this.messageRepository = messageRepository;
         this.lessonRepository = lessonRepository;
         this.subscriptionRepository = subscriptionRepository;
-        this.llmProvider = llmProvider;
+        this.providerService = providerService;
+        this.openAiProvider = openAiProvider;
+        this.anthropicProvider = anthropicProvider;
+        this.geminiProvider = geminiProvider;
         this.appConfig = appConfig;
         this.redisTemplate = redisTemplate;
         this.circuitBreaker = circuitBreaker;
@@ -96,7 +106,7 @@ public class AiService {
         saveMessage(session.getId(), "user", message);
 
         try {
-            LLMProvider.ChatResponse response = llmProvider.complete(messages, systemPrompt);
+            ChatResponse response = callLlm(messages, systemPrompt);
             circuitBreaker.recordSuccess(circuitKey);
 
             saveMessage(session.getId(), "assistant", response.content());
@@ -126,6 +136,34 @@ public class AiService {
                 .toList();
 
         return new ChatHistoryResponse(responses);
+    }
+
+    private ChatResponse callLlm(List<ChatMessage> messages, String systemPrompt) {
+        AiProviderService.ActiveProviderInfo active = providerService.getActiveProvider().orElse(null);
+
+        String apiKey, baseUrl, model;
+        if (active != null) {
+            apiKey = active.apiKey();
+            baseUrl = active.baseUrl();
+            model = active.defaultModel();
+        } else {
+            apiKey = appConfig.getAiApiKey();
+            baseUrl = appConfig.getAiBaseUrl();
+            model = appConfig.getAiModel();
+        }
+
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new AiUnavailableException("No AI API key configured. Add a provider in admin settings or set AI_API_KEY in .env");
+        }
+
+        String lowerUrl = baseUrl.toLowerCase();
+        if (lowerUrl.contains("anthropic")) {
+            return anthropicProvider.complete(messages, systemPrompt, apiKey, baseUrl, model);
+        } else if (lowerUrl.contains("google") || lowerUrl.contains("gemini")) {
+            return geminiProvider.complete(messages, systemPrompt, apiKey, baseUrl, model);
+        } else {
+            return openAiProvider.complete(messages, systemPrompt, apiKey, baseUrl, model);
+        }
     }
 
     private void checkRateLimit(UUID userId) {
