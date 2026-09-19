@@ -40,6 +40,7 @@ public class AppConfig {
 
     // Other
     private String youtubeApiKey = "";
+    private String corsAllowedOrigins = "";
     private String webOrigin = "";
     private String adminOrigin = "";
 
@@ -99,6 +100,9 @@ public class AppConfig {
 
     public String getYoutubeApiKey() { return youtubeApiKey; }
     public void setYoutubeApiKey(String youtubeApiKey) { this.youtubeApiKey = youtubeApiKey; }
+
+    public String getCorsAllowedOrigins() { return corsAllowedOrigins; }
+    public void setCorsAllowedOrigins(String corsAllowedOrigins) { this.corsAllowedOrigins = corsAllowedOrigins; }
 
     public String getWebOrigin() { return webOrigin; }
     public void setWebOrigin(String webOrigin) { this.webOrigin = webOrigin; }

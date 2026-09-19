@@ -1,3 +1,5 @@
+import { getAccessToken, refreshTokens, saveTokens, clearTokens, getTokens } from "./auth";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8082";
 
 export interface ApiTaxonomyNode {
@@ -49,11 +51,42 @@ export interface ApiFeaturedResponse {
   categories: ApiTaxonomyNode[];
 }
 
-async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${res.statusText}`);
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  // Try transparent refresh on 401
+  if (res.status === 401 && token) {
+    const tokens = getTokens();
+    if (tokens?.refreshToken) {
+      try {
+        const newTokens = await refreshTokens(tokens.refreshToken);
+        saveTokens(newTokens);
+        headers["Authorization"] = `Bearer ${newTokens.accessToken}`;
+        res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+      } catch {
+        clearTokens();
+        if (typeof window !== "undefined") window.location.reload();
+        throw new Error("Session expired");
+      }
+    } else {
+      clearTokens();
+      if (typeof window !== "undefined") window.location.reload();
+      throw new Error("Unauthorized");
+    }
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || err.error || `API ${res.status}: ${res.statusText}`);
+  }
   return res.json();
 }
 

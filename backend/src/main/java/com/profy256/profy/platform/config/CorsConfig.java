@@ -3,11 +3,13 @@ package com.profy256.profy.platform.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Configuration
 public class CorsConfig {
@@ -18,35 +20,48 @@ public class CorsConfig {
         this.appConfig = appConfig;
     }
 
-    @Bean
-    public CorsFilter corsFilter() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowCredentials(true);
-        config.addAllowedHeader("Content-Type");
-        config.addAllowedHeader("Authorization");
-        config.addAllowedHeader("X-App-Version");
-        config.addAllowedMethod("GET");
-        config.addAllowedMethod("POST");
-        config.addAllowedMethod("PUT");
-        config.addAllowedMethod("DELETE");
-        config.addAllowedMethod("OPTIONS");
+    /**
+     * Resolves allowed origins from the {@code CORS_ALLOWED_ORIGINS} env var
+     * (comma-separated). Falls back to {@code WEB_ORIGIN} / {@code ADMIN_ORIGIN}
+     * if the primary var is empty, then to localhost dev defaults.
+     */
+    private List<String> resolveOrigins() {
+        String raw = appConfig.getCorsAllowedOrigins();
 
-        List<String> origins = new ArrayList<>();
-        String webOrigin = appConfig.getWebOrigin();
-        String adminOrigin = appConfig.getAdminOrigin();
-        if (webOrigin != null && !webOrigin.isEmpty()) origins.add(webOrigin);
-        if (adminOrigin != null && !adminOrigin.isEmpty()) origins.add(adminOrigin);
-
-        if (origins.isEmpty()) {
-            origins.add("http://localhost:3000");
-            origins.add("http://localhost:5173");
-            origins.add("http://localhost:4173");
+        if (raw == null || raw.isBlank()) {
+            // Build from individual origin vars
+            raw = Stream.of(appConfig.getWebOrigin(), appConfig.getAdminOrigin())
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.joining(","));
         }
 
-        config.setAllowedOrigins(origins);
+        if (raw == null || raw.isBlank()) {
+            // Localhost dev defaults
+            return List.of(
+                    "http://localhost:3000",
+                    "http://localhost:3003",
+                    "http://localhost:5173",
+                    "http://localhost:4173"
+            );
+        }
+
+        return Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(resolveOrigins());
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Content-Type", "Authorization", "X-App-Version"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-        return new CorsFilter(source);
+        return source;
     }
 }

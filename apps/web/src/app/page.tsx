@@ -2,9 +2,11 @@
 
 import { useRef, useState, useEffect } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import { register as apiRegister, login as apiLogin, logout as apiLogout, getTokens, saveTokens } from "@/lib/auth";
 
 type Screen =
   | "welcome"
+  | "register"
   | "interests"
   | "home"
   | "category"
@@ -116,8 +118,8 @@ function Sidebar({
         </div>
         {!collapsed && (
           <div>
-            <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 700, color: FG, lineHeight: 1.1 }}>Profy</div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: PRIMARY, letterSpacing: 1, textTransform: "uppercase" }}>Skill Academy</div>
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 700, color: FG, lineHeight: 1.1 }}>Dera Skul</div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: PRIMARY, letterSpacing: 1, textTransform: "uppercase" }}>Learn &amp; Grow</div>
           </div>
         )}
       </div>
@@ -283,8 +285,8 @@ function WelcomeScreen({ onGetStarted, onLogin }: { onGetStarted: () => void; on
             </svg>
           </div>
           <div>
-            <div style={{ fontFamily: "var(--font-serif)", fontSize: 36, fontWeight: 700, color: FG, letterSpacing: -0.5 }}>Profy</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: PRIMARY, letterSpacing: 2, textTransform: "uppercase" }}>Skill Academy</div>
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: 36, fontWeight: 700, color: FG, letterSpacing: -0.5 }}>Dera Skul</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: PRIMARY, letterSpacing: 2, textTransform: "uppercase" }}>Learn &amp; Grow</div>
           </div>
         </div>
         <p style={{ fontFamily: "var(--font-serif)", fontSize: 26, color: FG, lineHeight: 1.4, fontStyle: "italic", marginBottom: 12 }}>
@@ -1045,6 +1047,88 @@ function SubscriptionScreen({ onBack }: { onBack: () => void }) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
+   Register screen — name + email + password with show/hide toggle
+   ──────────────────────────────────────────────────────────────────────────── */
+function RegisterScreen({ onRegister, onBack }: { onRegister: () => void; onBack: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email || !password) { setError("All fields are required."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const pair = await apiRegister(name.trim(), email, password);
+      saveTokens(pair);
+      onRegister();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Registration failed");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--background)" }}>
+      <div style={{ width: "100%", maxWidth: 400, padding: 32 }}>
+        <button onClick={onBack} className="flex items-center gap-1.5 mb-8" style={{ background: "none", border: "none", cursor: "pointer", color: SECONDARY, fontWeight: 600, fontSize: 14 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={SECONDARY} strokeWidth="2.2"><path d="M15 18l-6-6 6-6" /></svg>
+          Back
+        </button>
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, color: FG, marginBottom: 4 }}>Create Account</div>
+          <div style={{ fontSize: 14, color: FG_MUTED }}>Start learning with Dera Skul</div>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: FG_MUTED, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>Full Name</label>
+            <input type="text" value={name} onChange={(e) => { setName(e.target.value); setError(""); }} placeholder="Your full name"
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 8, border: `1.5px solid ${BORDER}`, background: CARD, color: FG, fontSize: 15, outline: "none" }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = PRIMARY)} onBlur={(e) => (e.currentTarget.style.borderColor = BORDER)} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: FG_MUTED, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>Email</label>
+            <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(""); }} placeholder="you@example.com"
+              style={{ width: "100%", padding: "12px 14px", borderRadius: 8, border: `1.5px solid ${BORDER}`, background: CARD, color: FG, fontSize: 15, outline: "none" }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = PRIMARY)} onBlur={(e) => (e.currentTarget.style.borderColor = BORDER)} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: FG_MUTED, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>Password</label>
+            <div style={{ position: "relative" }}>
+              <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} placeholder="At least 8 characters"
+                style={{ width: "100%", padding: "12px 40px 12px 14px", borderRadius: 8, border: `1.5px solid ${BORDER}`, background: CARD, color: FG, fontSize: 15, outline: "none" }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = PRIMARY)} onBlur={(e) => (e.currentTarget.style.borderColor = BORDER)} />
+              <button type="button" onClick={() => setShowPassword((v) => !v)}
+                style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: FG_MUTED, padding: 4 }} tabIndex={-1}>
+                {showPassword ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                )}
+              </button>
+            </div>
+          </div>
+          {error && <div style={{ fontSize: 13, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+          <button type="submit" disabled={loading}
+            style={{ width: "100%", padding: "14px 0", borderRadius: 10, border: "none", cursor: loading ? "wait" : "pointer", background: loading ? FG_MUTED : PRIMARY, color: ON_PRIMARY, fontSize: 16, fontWeight: 700, boxShadow: "0 2px 12px rgb(var(--shadow-color) / 0.3)", opacity: loading ? 0.7 : 1 }}>
+            {loading ? "Creating account..." : "Create Account"}
+          </button>
+        </form>
+        <div style={{ textAlign: "center", marginTop: 24, fontSize: 13, color: FG_MUTED }}>
+          Already have an account?{" "}
+          <button onClick={onBack} style={{ color: PRIMARY, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Log In</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
    Login screen — email + password with show/hide toggle
    ──────────────────────────────────────────────────────────────────────────── */
 function LoginScreen({ onLogin, onBack }: { onLogin: () => void; onBack: () => void }) {
@@ -1054,12 +1138,19 @@ function LoginScreen({ onLogin, onBack }: { onLogin: () => void; onBack: () => v
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { setError("Both fields are required."); return; }
     setLoading(true);
     setError("");
-    setTimeout(() => { setLoading(false); onLogin(); }, 500);
+    try {
+      const pair = await apiLogin(email, password);
+      saveTokens(pair);
+      onLogin();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed");
+      setLoading(false);
+    }
   };
 
   return (
@@ -1078,7 +1169,7 @@ function LoginScreen({ onLogin, onBack }: { onLogin: () => void; onBack: () => v
 
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, color: FG, marginBottom: 4 }}>Sign in</div>
-          <div style={{ fontSize: 14, color: FG_MUTED }}>Welcome back to Profy Skill Academy</div>
+          <div style={{ fontSize: 14, color: FG_MUTED }}>Welcome back to Dera Skul</div>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -1146,7 +1237,7 @@ function LoginScreen({ onLogin, onBack }: { onLogin: () => void; onBack: () => v
         <div style={{ textAlign: "center", marginTop: 24, fontSize: 13, color: FG_MUTED }}>
           Don&apos;t have an account?{" "}
           <button onClick={onBack} style={{ color: PRIMARY, background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
-            Get Started
+            Sign Up
           </button>
         </div>
       </div>
@@ -1344,7 +1435,9 @@ function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: ()
    ──────────────────────────────────────────────────────────────────────────── */
 
 export default function App() {
-  const [nav, setNav] = useState<NavState>({ screen: "welcome" });
+  const [nav, setNav] = useState<NavState>(() => ({
+    screen: getTokens() ? "home" : "welcome",
+  }));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
 
@@ -1354,6 +1447,11 @@ export default function App() {
 
   const go = (screen: Screen, extra?: Partial<NavState>) => setNav((n) => ({ ...n, screen, ...extra }));
 
+  const handleLogout = async () => {
+    await apiLogout();
+    setNav({ screen: "welcome" });
+  };
+
   const handleBottomNav = (tab: "home" | "learn" | "library" | "profile" | "resources") => {
     if (tab === "home") go("home");
     else if (tab === "learn") go("category", { category: categories[0] });
@@ -1362,14 +1460,16 @@ export default function App() {
     else if (tab === "resources") go("resources");
   };
 
-  const isWelcome = nav.screen === "welcome" || nav.screen === "interests" || nav.screen === "login";
+  const isWelcome = nav.screen === "welcome" || nav.screen === "interests" || nav.screen === "login" || nav.screen === "register";
 
   const render = () => {
     switch (nav.screen) {
       case "welcome":
-        return <WelcomeScreen onGetStarted={() => go("interests")} onLogin={() => go("login")} />;
+        return <WelcomeScreen onGetStarted={() => go("register")} onLogin={() => go("login")} />;
+      case "register":
+        return <RegisterScreen onRegister={() => go("interests")} onBack={() => go("login")} />;
       case "login":
-        return <LoginScreen onLogin={() => go("home")} onBack={() => go("welcome")} />;
+        return <LoginScreen onLogin={() => go("home")} onBack={() => go("register")} />;
       case "interests":
         return <InterestsScreen onContinue={() => go("home")} />;
       case "home":
