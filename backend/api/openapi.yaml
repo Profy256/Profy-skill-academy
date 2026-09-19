@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
-  title: Profy Skill Academy API
+  title: Dera Skul API
   version: 0.1.0
   license:
     name: UNLICENSED
     identifier: UNLICENSED
   description: |
-    REST API for the Profy Skill Academy learning platform (TECHNICAL_DOC §5).
+    REST API for the Dera Skul learning platform (TECHNICAL_DOC §5).
 
     * Consumer endpoints (mobile + web share them) accept a JWT with audience
       `consumer`. Admin endpoints live under `/api/v1/admin/*` and accept a JWT

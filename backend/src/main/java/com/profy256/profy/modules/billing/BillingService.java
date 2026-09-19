@@ -76,7 +76,7 @@ public class BillingService {
                                                       String phoneNumber, String country) {
         String reference = UUID.randomUUID().toString();
         int amount = "premium".equals(plan) ? 37000 : 0; // 37,000 UGX/month
-        String description = "Profy Skill Academy - " + plan + " subscription";
+        String description = "Dera Skul - " + plan + " subscription";
         String callbackUrl = appConfig.getMarzpayCallbackUrl();
 
         Map<String, Object> result = marzPayClient.collectMoney(

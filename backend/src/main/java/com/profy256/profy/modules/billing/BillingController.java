@@ -40,8 +40,8 @@ public class BillingController {
             Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         String plan = body.getOrDefault("plan", "premium");
-        String successUrl = body.getOrDefault("successUrl", "https://profyacademy.com/library?upgraded=true");
-        String cancelUrl = body.getOrDefault("cancelUrl", "https://profyacademy.com/pricing");
+        String successUrl = body.getOrDefault("successUrl", "https://deraskul.com/library?upgraded=true");
+        String cancelUrl = body.getOrDefault("cancelUrl", "https://deraskul.com/pricing");
 
         try {
             Map<String, Object> result = billingService.createStripeCheckout(userId, plan, successUrl, cancelUrl);

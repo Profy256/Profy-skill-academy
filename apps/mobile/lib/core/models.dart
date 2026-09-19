@@ -13,8 +13,8 @@ class TokenPair {
   final String refreshToken;
 
   factory TokenPair.fromJson(Map<String, dynamic> j) => TokenPair(
-        accessToken: j['access_token'] as String,
-        refreshToken: j['refresh_token'] as String,
+        accessToken: j['accessToken'] as String? ?? j['access_token'] as String,
+        refreshToken: j['refreshToken'] as String? ?? j['refresh_token'] as String,
       );
 
   Map<String, dynamic> toJson() => {
@@ -60,15 +60,15 @@ class TaxonomyNode {
 
   factory TaxonomyNode.fromJson(Map<String, dynamic> j) => TaxonomyNode(
         id: j['id'] as String,
-        parentId: j['parent_id'] as String?,
-        nodeType: j['node_type'] as String,
+        parentId: (j['parentId'] ?? j['parent_id']) as String?,
+        nodeType: (j['nodeType'] ?? j['node_type']) as String,
         name: j['name'] as String,
         slug: j['slug'] as String,
         description: j['description'] as String?,
         icon: j['icon'] as String?,
-        phase: (j['phase'] as num?)?.toInt() ?? 1,
-        isActive: (j['is_active'] as bool?) ?? true,
-        sortOrder: (j['sort_order'] as num?)?.toInt() ?? 0,
+        phase: ((j['phase'] as num?)?.toInt()) ?? 1,
+        isActive: (j['isActive'] as bool?) ?? (j['is_active'] as bool?) ?? true,
+        sortOrder: ((j['sortOrder'] as num?) ?? (j['sort_order'] as num?))?.toInt() ?? 0,
         depth: (j['depth'] as num?)?.toInt() ?? 0,
         children: ((j['children'] as List?) ?? const [])
             .map((e) => TaxonomyNode.fromJson(e as Map<String, dynamic>))
@@ -327,10 +327,10 @@ class FeaturedHome {
   final List<TaxonomyNode> categories;
 
   factory FeaturedHome.fromJson(Map<String, dynamic> j) => FeaturedHome(
-        featured: ((j['featured'] as List?) ?? const [])
+        featured: ((j['featuredCourses'] as List?) ?? (j['featured'] as List?) ?? const [])
             .map((e) => CourseSummary.fromJson(e as Map<String, dynamic>))
             .toList(),
-        categories: ((j['categories'] as List?) ?? const [])
+        categories: ((j['categoryGrid'] as List?) ?? (j['categories'] as List?) ?? const [])
             .map((e) => TaxonomyNode.fromJson(e as Map<String, dynamic>))
             .toList(),
       );

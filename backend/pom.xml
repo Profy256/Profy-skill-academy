@@ -14,8 +14,8 @@
     <groupId>com.profy256</groupId>
     <artifactId>profy-skill-academy</artifactId>
     <version>0.1.0</version>
-    <name>Profy Skill Academy API</name>
-    <description>Profy Skill Academy — modular monolith backend</description>
+    <name>Dera Skul API</name>
+    <description>Dera Skul — modular monolith backend</description>
 
     <properties>
         <java.version>17</java.version>

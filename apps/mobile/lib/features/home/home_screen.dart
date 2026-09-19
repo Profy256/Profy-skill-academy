@@ -22,7 +22,7 @@ class HomeScreen extends ConsumerWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Profy Skill Academy', style: Theme.of(context).textTheme.titleLarge),
+            Text('Dera Skul', style: Theme.of(context).textTheme.titleLarge),
             Text(
               'Learn anything. Anytime. Anywhere.',
               style: Theme.of(context)

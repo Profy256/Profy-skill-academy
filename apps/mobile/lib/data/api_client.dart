@@ -151,7 +151,8 @@ class ProfyApiClient {
 
   Future<List<TaxonomyNode>> taxonomyTree() async {
     final res = await _dio.get('/api/v1/taxonomy/tree');
-    return ((res.data as List?) ?? const [])
+    final data = (res.data as Map).cast<String, dynamic>();
+    return ((data['tree'] as List?) ?? const [])
         .map((e) => TaxonomyNode.fromJson((e as Map).cast<String, dynamic>()))
         .toList();
   }

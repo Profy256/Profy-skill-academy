@@ -85,7 +85,7 @@ export default function Sidebar({ activeView, onNavigate, onLogout }: Props) {
     <aside className="flex flex-col w-52 shrink-0 border-r" style={{ background: "#141414", borderColor: "#262626" }}>
       <div className="px-5 pt-5 pb-4 border-b" style={{ borderColor: "#262626" }}>
         <div className="font-mono text-xs tracking-widest" style={{ color: "#f59e0b" }}>
-          PROFY ADMIN
+          DERA ADMIN
         </div>
         <div className="font-mono text-xs mt-0.5" style={{ color: "#5c5c5c" }}>
           Content Management
@@ -175,7 +175,7 @@ export default function Sidebar({ activeView, onNavigate, onLogout }: Props) {
           </div>
           <div className="min-w-0">
             <div className="font-mono text-xs truncate" style={{ color: "#8f8f8f" }}>
-              admin@profy.io
+              admin@deraskul.com
             </div>
             <div className="font-mono text-xs" style={{ color: "#5c5c5c", fontSize: "10px" }}>
               Administrator

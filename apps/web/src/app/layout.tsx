@@ -21,8 +21,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Profy Skill Academy — Learn Programming, Languages & Professional Skills",
-    template: "%s | Profy Skill Academy",
+    default: "Dera Skul — Learn Programming, Languages & Professional Skills",
+    template: "%s | Dera Skul",
   },
   description:
     "Master programming, languages, and professional skills with expert-led courses, AI-powered tutoring, and hands-on exercises. Free courses available.",
@@ -42,10 +42,10 @@ export const metadata: Metadata = {
     "free courses",
     "AI tutor",
   ],
-  authors: [{ name: "Profy Skill Academy" }],
-  creator: "Profy Skill Academy",
-  publisher: "Profy Skill Academy",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://profyskillacademy.com"),
+  authors: [{ name: "Dera Skul" }],
+  creator: "Dera Skul",
+  publisher: "Dera Skul",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://deraskul.com"),
   alternates: {
     canonical: "/",
   },
@@ -53,8 +53,8 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "/",
-    siteName: "Profy Skill Academy",
-    title: "Profy Skill Academy — Learn Programming, Languages & Professional Skills",
+    siteName: "Dera Skul",
+    title: "Dera Skul — Learn Programming, Languages & Professional Skills",
     description:
       "Master programming, languages, and professional skills with expert-led courses and AI-powered tutoring.",
     images: [
@@ -62,13 +62,13 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Profy Skill Academy",
+        alt: "Dera Skul",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Profy Skill Academy",
+    title: "Dera Skul",
     description:
       "Master programming, languages, and professional skills with expert-led courses and AI-powered tutoring.",
     images: ["/og-image.png"],

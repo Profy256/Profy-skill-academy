@@ -52,7 +52,7 @@ export default function App() {
           <div className="ml-auto flex items-center gap-3">
             <ThemeToggle />
             <div className="font-mono text-xs" style={{ color: "var(--text-faint)" }}>
-              profy-cms v3.0 — Sep 2026
+              dera-cms v3.0 — Sep 2026
             </div>
           </div>
         </div>

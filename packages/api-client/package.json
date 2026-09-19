@@ -2,7 +2,7 @@
   "name": "@profy/api-client",
   "version": "0.1.0",
   "private": true,
-  "description": "Generated TypeScript client for the Profy Skill Academy API (web + admin). Source of truth: backend/api/openapi.yaml",
+  "description": "Generated TypeScript client for the Dera Skul API (web + admin). Source of truth: backend/api/openapi.yaml",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

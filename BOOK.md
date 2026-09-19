@@ -1,17 +1,17 @@
 # CampusLibrary Integration Guide
 
-> Connecting Profy Skill Academy with CampusLibrary (www.campuslibrary.xyz)
+> Connecting Dera Skul with CampusLibrary (www.campuslibrary.xyz)
 
 ---
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
-2. [What's Been Done (Profy Side)](#whats-been-done-profy-side)
+2. [What's Been Done (Dera Skul Side)](#whats-been-done-profy-side)
 3. [What You Need to Build (CampusLibrary API)](#what-you-need-to-build-campuslibrary-api)
 4. [API Contract](#api-contract)
 5. [Data Flow](#data-flow)
-6. [Profy Backend Integration](#profy-backend-integration)
+6. [Dera Skul Backend Integration](#profy-backend-integration)
 7. [Admin Panel Management](#admin-panel-management)
 8. [Consumer Frontend (Web)](#consumer-frontend-web)
 9. [Consumer Frontend (Mobile)](#consumer-frontend-mobile)
@@ -23,7 +23,7 @@
 
 ```
 ┌──────────────────────┐         ┌──────────────────────────┐
-│   CampusLibrary      │◄──API──►│   Profy Backend          │
+│   CampusLibrary      │◄──API──►│   Dera Skul Backend          │
 │   www.campuslibrary  │         │   (Spring Boot)          │
 │                      │         │                          │
 │  - Books database    │         │  - CampusLibraryClient   │
@@ -40,11 +40,11 @@
                          └─────────┘  └───────────┘  └────────┘
 ```
 
-**Key principle:** CampusLibrary is the single source of truth for books. Profy caches metadata locally for performance but never stores book content — all reading happens through CampusLibrary.
+**Key principle:** CampusLibrary is the single source of truth for books. Dera Skul caches metadata locally for performance but never stores book content — all reading happens through CampusLibrary.
 
 ---
 
-## What's Been Done (Profy Side)
+## What's Been Done (Dera Skul Side)
 
 ### GEO / SEO (Completed)
 
@@ -210,7 +210,7 @@ GET /api/v1/search
   }
 ```
 
-#### Authentication (for Profy)
+#### Authentication (for Dera Skul)
 
 ```
 GET /api/v1/auth/verify
@@ -251,8 +251,8 @@ GET /api/v1/auth/verify
 
 CampusLibrary should:
 
-- Issue a **service token** for Profy (long-lived API key, not user tokens)
-- Rate limit Profy to ~1000 requests/hour (adjust as needed)
+- Issue a **service token** for Dera Skul (long-lived API key, not user tokens)
+- Rate limit Dera Skul to ~1000 requests/hour (adjust as needed)
 - Return proper error codes:
 
 ```json
@@ -270,7 +270,7 @@ CampusLibrary should:
 
 ## API Contract
 
-### Profy → CampusLibrary (requests)
+### Dera Skul → CampusLibrary (requests)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -280,7 +280,7 @@ CampusLibrary should:
 | `/api/v1/categories` | GET | All categories with book counts |
 | `/api/v1/search?q=...` | GET | Full-text search |
 
-### Profy Backend → Frontend (responses)
+### Dera Skul Backend → Frontend (responses)
 
 #### `GET /api/v1/campus-books`
 
@@ -342,7 +342,7 @@ CampusLibrary should:
 ```
 1. User opens "Campus Library" tab
 2. Frontend calls GET /api/v1/campus-books?page=1&category=computer-science
-3. Profy Backend:
+3. Dera Skul Backend:
    a. Checks Redis cache (key: campus-books:list:{params})
    b. If cache miss → calls campuslibrary.xyz/api/v1/books?...
    c. Merges response with campus_book_settings (premium flags from admin)
@@ -356,7 +356,7 @@ CampusLibrary should:
 ```
 1. User clicks a book
 2. Frontend calls GET /api/v1/campus-books/:id
-3. Profy Backend:
+3. Dera Skul Backend:
    a. Fetches book detail from campuslibrary.xyz/api/v1/books/:id
    b. Applies admin settings (premium flag)
    c. Returns enriched book + chapter list
@@ -364,10 +364,10 @@ CampusLibrary should:
 5. User clicks "Read"
 6. If premium → check subscription → if free or subscribed:
    a. Frontend calls GET /api/v1/campus-books/:id/read?format=pdf
-   b. Profy Backend:
+   b. Dera Skul Backend:
       - Calls campuslibrary.xyz/api/v1/books/:id/file?format=pdf
       - CampusLibrary returns a signed/temporary URL
-      - Profy passes URL to frontend
+      - Dera Skul passes URL to frontend
    c. Frontend opens PDF viewer / page-flip viewer with the URL
 ```
 
@@ -379,7 +379,7 @@ CampusLibrary should:
 3. Admin toggles "Premium" switch on a book
 4. Frontend calls PUT /api/v1/admin/campus-books/:campusBookId/settings
    Body: { "isPremium": true }
-5. Profy Backend:
+5. Dera Skul Backend:
    a. Upserts campus_book_settings row
    b. Invalidates relevant cache keys
 6. Next time a user browses, that book shows premium badge
@@ -387,7 +387,7 @@ CampusLibrary should:
 
 ---
 
-## Profy Backend Integration
+## Dera Skul Backend Integration
 
 ### New Migration (V13)
 
@@ -694,13 +694,13 @@ final campusBooksProvider = FutureProvider.autoDispose
 
 - [ ] Database schema created (books, categories, book_files, book_chapters)
 - [ ] REST API endpoints implemented and tested
-- [ ] Service token generated for Profy
-- [ ] CORS configured for profyskillacademy.com
-- [ ] Rate limiting configured (1000 req/hr for Profy)
+- [ ] Service token generated for Dera Skul
+- [ ] CORS configured for deraskul.com
+- [ ] Rate limiting configured (1000 req/hr for Dera Skul)
 - [ ] SSL certificate active on campuslibrary.xyz
 - [ ] Initial book catalog imported
 
-### Profy Backend
+### Dera Skul Backend
 
 - [ ] V13 migration applied
 - [ ] `CAMPUS_LIBRARY_BASE_URL` env var set
@@ -710,7 +710,7 @@ final campusBooksProvider = FutureProvider.autoDispose
 - [ ] Admin endpoints tested
 - [ ] Public endpoints tested
 
-### Profy Admin
+### Dera Skul Admin
 
 - [ ] CampusLibraryManager component built
 - [ ] CampusLibrary nav item added to sidebar
@@ -718,7 +718,7 @@ final campusBooksProvider = FutureProvider.autoDispose
 - [ ] Sync button working
 - [ ] Book detail modal working
 
-### Profy Web
+### Dera Skul Web
 
 - [ ] Library screen updated with "Campus Library" tab
 - [ ] Book grid rendering with covers
@@ -728,7 +728,7 @@ final campusBooksProvider = FutureProvider.autoDispose
 - [ ] Premium gate showing upgrade prompt
 - [ ] Free books opening directly
 
-### Profy Mobile
+### Dera Skul Mobile
 
 - [ ] CampusLibraryScreen built
 - [ ] BookCard widget built
@@ -759,4 +759,4 @@ CAMPUS_BOOKS_CACHE_TTL=300
 3. **Offline reading** — Download books for offline access (mobile)
 4. **Highlights & notes** — Users can highlight text and add notes
 5. **Book clubs** — Group reading with discussion
-6. **CampusLibrary Admin** — Manage CampusLibrary itself through Profy admin (if desired)
+6. **CampusLibrary Admin** — Manage CampusLibrary itself through Dera Skul admin (if desired)

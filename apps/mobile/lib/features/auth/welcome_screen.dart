@@ -20,7 +20,7 @@ class WelcomeScreen extends StatelessWidget {
               const ProfyLogo(size: 88),
               const SizedBox(height: 24),
               Text(
-                'Profy Skill Academy',
+                'Dera Skul',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 8),

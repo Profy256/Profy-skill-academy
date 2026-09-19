@@ -39,10 +39,10 @@ export default function Login({ onAuth }: Props) {
       <div className="hidden lg:flex flex-col justify-between w-72 p-8 border-r" style={{ borderColor: "var(--border)" }}>
         <div>
           <div className="font-mono text-xs tracking-widest" style={{ color: "var(--accent)" }}>
-            PSA
+            DSK
           </div>
           <div className="font-mono text-xs mt-6 leading-relaxed" style={{ color: "var(--text-3)" }}>
-            PROFY SKILL ACADEMY
+            DERA SKUL
             <br />
             CONTENT MANAGEMENT
             <br />
@@ -78,7 +78,7 @@ export default function Login({ onAuth }: Props) {
               Sign in
             </h1>
             <p className="font-mono text-xs mt-1" style={{ color: "var(--text-3)" }}>
-              Internal access only — Profy Skill Academy
+              Internal access only — Dera Skul
             </p>
           </div>
 
@@ -94,7 +94,7 @@ export default function Login({ onAuth }: Props) {
                   setEmail(e.target.value);
                   setError("");
                 }}
-                placeholder="curator@profy.io"
+                placeholder="curator@deraskul.com"
                 autoComplete="email"
                 className="w-full px-3 py-2.5 font-mono text-sm outline-none transition-all"
                 style={{
@@ -200,7 +200,7 @@ export default function Login({ onAuth }: Props) {
 
           <div className="mt-8 pt-6 border-t" style={{ borderColor: "var(--border)" }}>
             <p className="font-mono text-xs" style={{ color: "var(--text-3)" }}>
-              Access issues? Contact <span style={{ color: "var(--text-2)" }}>it@profy.io</span>
+              Access issues? Contact <span style={{ color: "var(--text-2)" }}>it@deraskul.com</span>
             </p>
           </div>
         </div>

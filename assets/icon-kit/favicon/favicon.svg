@@ -1,0 +1,21 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgf" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#CE7B62"/>
+      <stop offset="100%" stop-color="#A6543F"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bgf)"/>
+  <polygon points="126.8,260.6 256.0,203.4 385.2,260.6 256.0,317.7" fill="#FBF8F3"/>
+<circle cx="332.2" cy="271.4" r="14*0.68" fill="#FBF8F3"/>
+    <circle cx="332.2" cy="271.4" r="9.5" fill="#FBF8F3"/>
+    <path d="M 332.2 281.0 L 329.4 342.2 L 343.0 353.0 L 337.6 289.1 Z" fill="#FBF8F3"/>
+<path d="
+      M 156.7 286.4
+      L 156.7 331.3
+      L 256.0 377.5
+      L 355.3 331.3
+      L 355.3 286.4
+      L 256.0 329.9
+      Z" fill="#FBF8F3"/>
+</svg>

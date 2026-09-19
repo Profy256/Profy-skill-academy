@@ -1,4 +1,4 @@
-# Profy Skill Academy — Product Requirements Document
+# Dera Skul — Product Requirements Document
 
 **Version:** 1.4 (Draft)
 **Status:** Planning
@@ -8,7 +8,7 @@
 
 ## 1. Overview
 
-Profy Skill Academy is a mobile learning platform for practical, applied skills — starting with technology, business/finance, and languages, with vocational trade skills (food production, agriculture, construction, automotive, beauty & fashion, manufacturing, etc.) planned as a future expansion.
+Dera Skul is a mobile learning platform for practical, applied skills — starting with technology, business/finance, and languages, with vocational trade skills (food production, agriculture, construction, automotive, beauty & fashion, manufacturing, etc.) planned as a future expansion.
 
 The platform combines curated video lessons (sourced from YouTube, human-curated via a separate admin web app) with an AI Teacher available inside every lesson to answer questions when a learner gets confused.
 
@@ -143,7 +143,7 @@ Automotive · Beauty & Fashion · Manufacturing · etc.
 
 ### 7.5 Certificates (Phase 2 — design now, build later)
 - DB should anticipate it so Phase 2 doesn't require a migration
-- Anticipated flow: course completed → assessment passed → certificate generated → verification page/QR code (e.g. `profyacademy.com/verify/ABC123`)
+- Anticipated flow: course completed → assessment passed → certificate generated → verification page/QR code (e.g. `deraskul.com/verify/ABC123`)
 - Potential organic growth mechanism (shareable completion posts)
 
 ### 7.6 Monetization — Freemium with Ads

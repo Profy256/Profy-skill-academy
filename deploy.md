@@ -1,4 +1,4 @@
-# Profy Skill Academy — Deployment Runbook (deploy.md)
+# Dera Skul — Deployment Runbook (deploy.md)
 
 **Companion to:** `docs/TECHNICAL_DOC.md` (§8 Environments, §11 Deployment) · **Build order:** `todo.md`
 **Scope:** how the system goes from code → running in each environment, for all three frontends
@@ -16,8 +16,8 @@ plus the Java backend (`api` Spring Boot app, `worker` Spring Boot app).
 | Env | Purpose | Data | Where |
 |---|---|---|---|
 | `local` | Development | dockerized Postgres/Redis, seeded demo content | developer machine (`docker-compose up`) |
-| `staging` | Pre-release QA, webhook testing | throwaway DB, Stripe **test** mode, test AI key | small VPS or Fly.io app, `staging.profyacademy.com` |
-| `production` | Live learners | real DB, Stripe **live** mode, production AI key | VPS, `profyacademy.com` + `api.profyacademy.com` |
+| `staging` | Pre-release QA, webhook testing | throwaway DB, Stripe **test** mode, test AI key | small VPS or Fly.io app, `staging.deraskul.com` |
+| `production` | Live learners | real DB, Stripe **live** mode, production AI key | VPS, `deraskul.com` + `api.deraskul.com` |
 
 Rules:
 - **Staging first, always.** No deploy goes to production without passing the staging smoke test (§9).
@@ -31,10 +31,10 @@ Rules:
 - Ubuntu 22.04+ LTS, 2 vCPU / 4 GB RAM minimum (api + worker + Caddy live here; DB is managed)
 - Docker Engine + Docker Compose plugin installed
 - DNS records pointing to the server:
-  - `profyacademy.com`, `www.profyacademy.com` → web app
-  - `api.profyacademy.com` → backend API
-  - `admin.profyacademy.com` → admin app
-  - `staging.profyacademy.com` (+ subdomains) → staging clone
+  - `deraskul.com`, `www.deraskul.com` → web app
+  - `api.deraskul.com` → backend API
+  - `admin.deraskul.com` → admin app
+  - `staging.deraskul.com` (+ subdomains) → staging clone
 - Caddy handles automatic Let's Encrypt TLS for all hostnames
 - Firewall: allow 80/443, SSH only; Postgres/Redis are **never** exposed publicly
 
@@ -61,7 +61,7 @@ Source of truth: `backend/.env.example`. Secrets live in the deployment secret s
 | `STRIPE_WEBHOOK_SECRET` | api | `whsec_…` per-endpoint secret |
 | `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_YEARLY` | api | Stripe Price IDs created in §6 |
 | `REVENUECAT_WEBHOOK_AUTH` | api | shared secret checked on RevenueCat webhook |
-| `WEB_ORIGIN` / `ADMIN_ORIGIN` | api | CORS allowlist, e.g. `https://profyacademy.com` |
+| `WEB_ORIGIN` / `ADMIN_ORIGIN` | api | CORS allowlist, e.g. `https://deraskul.com` |
 | `ADMOB_APP_ID` | mobile | reserved (D6 — placeholder ads until network chosen) |
 | `SENTRY_DSN_*` | all clients | optional, Milestone 10 |
 
@@ -88,7 +88,7 @@ docker compose run --rm migrate up        # staging first, then production
 
 # 3. Deploy api (rolling: new container up → health check → old container down)
 docker compose pull api && docker compose up -d api
-curl -fsS https://api.profyacademy.com/healthz     # must 200 before proceeding
+curl -fsS https://api.deraskul.com/healthz     # must 200 before proceeding
 
 # 4. Deploy worker
 docker compose pull worker && docker compose up -d worker
@@ -131,19 +131,19 @@ cd apps/admin  && pnpm i && pnpm build   # → apps/admin/dist
 ## 6. Third-Party Setup (one-time per environment)
 
 ### Stripe (web subscriptions)
-1. Create Product "Profy Premium" → two recurring Prices: monthly, yearly → copy Price IDs into `STRIPE_PRICE_*`.
-2. Webhook endpoint: `https://api.profyacademy.com/api/v1/billing/stripe/webhook` — events: `subscription.created`, `subscription.updated`, `subscription.deleted`, `invoice.paid`, `invoice.payment_failed` → copy signing secret into `STRIPE_WEBHOOK_SECRET`.
+1. Create Product "Dera Skul Premium" → two recurring Prices: monthly, yearly → copy Price IDs into `STRIPE_PRICE_*`.
+2. Webhook endpoint: `https://api.deraskul.com/api/v1/billing/stripe/webhook` — events: `subscription.created`, `subscription.updated`, `subscription.deleted`, `invoice.paid`, `invoice.payment_failed` → copy signing secret into `STRIPE_WEBHOOK_SECRET`.
 3. Test mode first on staging with `stripe listen --forward-to` locally (Milestone 8 DoD).
 
 ### RevenueCat (mobile IAP)
 1. Create app entries (Play Store + App Store) in RevenueCat, link store products (monthly/yearly).
-2. Configure server webhook → `https://api.profyacademy.com/api/v1/billing/revenuecat/webhook` with `REVENUECAT_WEBHOOK_AUTH` shared secret.
+2. Configure server webhook → `https://api.deraskul.com/api/v1/billing/revenuecat/webhook` with `REVENUECAT_WEBHOOK_AUTH` shared secret.
 3. Sandbox-test purchases on both stores before closed testing.
 
 ### AI provider
 Set `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`. Verify with:
 ```bash
-curl -fsS -X POST https://api.profyacademy.com/api/v1/lessons/<id>/ai/chat \
+curl -fsS -X POST https://api.deraskul.com/api/v1/lessons/<id>/ai/chat \
   -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
   -d '{"message":"What is a variable?"}'
 ```
@@ -160,7 +160,7 @@ public oEmbed (worker). If quota ever demands the Data API, add `YOUTUBE_API_KEY
 Per release train (align with `X-App-Version` support in the API):
 
 1. Bump `pubspec.yaml` version (`1.x.y+build`).
-2. Android: `flutter build appbundle --dart-define=API_BASE_URL=https://api.profyacademy.com` → upload to **Play Internal testing** → promote: internal → closed → production.
+2. Android: `flutter build appbundle --dart-define=API_BASE_URL=https://api.deraskul.com` → upload to **Play Internal testing** → promote: internal → closed → production.
 3. iOS: `flutter build ipa` → **TestFlight** → App Store review → release.
 4. First release milestone (10): store listings, privacy policy URL, data-safety forms (collects email; no ads data until AdMob wired).
 5. Keep API backward compatible ≥ 2 app versions: users lag on updates; the API must
@@ -188,12 +188,12 @@ Per release train (align with `X-App-Version` support in the API):
 
 ## 9. Post-Deploy Smoke Test (run after every production deploy)
 
-- [ ] `GET https://api.profyacademy.com/healthz` → 200
-- [ ] Web loads at `profyacademy.com`; category grid shows **only** Phase-1 categories
+- [ ] `GET https://api.deraskul.com/healthz` → 200
+- [ ] Web loads at `deraskul.com`; category grid shows **only** Phase-1 categories
 - [ ] Register new user (web) → browse → open lesson → video plays
 - [ ] Ask AI Teacher → grounded reply; (negative) with AI key disabled in staging → `503 ai_unavailable`, lesson still works
 - [ ] Complete a lesson → appears in Library + continue-learning
-- [ ] Admin login at `admin.profyacademy.com` → create/edit a lesson → visible on web after cache TTL
+- [ ] Admin login at `admin.deraskul.com` → create/edit a lesson → visible on web after cache TTL
 - [ ] Stripe test (staging only): checkout → entitlement flips within 60s → ads disappear
 - [ ] Mobile smoke (staging build): same journey via TestFlight/internal track
 

@@ -159,7 +159,7 @@ public class AdminAiService {
         String taxonomyJson = buildTaxonomySummary(allNodes);
 
         return """
-            You are the Profy Skill Academy admin AI assistant. You help administrators manage content.
+            You are the Dera Skul admin AI assistant. You help administrators manage content.
             
             CURRENT TAXONOMY:
             %s

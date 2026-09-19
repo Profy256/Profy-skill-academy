@@ -1,4 +1,4 @@
-# Profy Skill Academy
+# Dera Skul
 
 **Learn Anything. Anytime. Anywhere.**
 
@@ -189,7 +189,26 @@ flutter run
 flutter run -d android
 flutter run -d ios
 flutter run -d chrome
+
+# Run on a physical device via USB (enable USB debugging first)
+flutter devices              # list connected devices
+flutter run -d <device-id>   # run on a specific device
+
+# If build is killed by OOM on low-RAM machines (< 8GB), limit Gradle memory:
+GRADLE_OPTS="-Xmx2g -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false" flutter run
 ```
+
+**Override API base URL (for physical device on same network):**
+
+```bash
+# Find your PC's local IP (e.g. 192.168.1.x), then:
+flutter run --dart-define=PROFY_API_BASE_URL=http://<your-pc-ip>:8080
+
+# Or build APK with the URL baked in:
+flutter build apk --dart-define=PROFY_API_BASE_URL=http://<your-pc-ip>:8080
+```
+
+> **Note:** The default `http://10.0.2.2:8080` only works on Android emulators. Physical devices need your PC's actual network IP.
 
 **Build release versions:**
 

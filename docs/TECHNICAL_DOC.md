@@ -1,4 +1,4 @@
-# Profy Skill Academy — Technical Design Document
+# Dera Skul — Technical Design Document
 
 **Version:** 1.0
 **Source of truth:** `profy_skill_academy_prd.md` (v1.4)

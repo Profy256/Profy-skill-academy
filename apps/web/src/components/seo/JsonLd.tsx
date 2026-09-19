@@ -1,4 +1,4 @@
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://profyskillacademy.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://deraskul.com";
 
 interface JsonLdProps {
   data: Record<string, unknown>;
@@ -17,18 +17,18 @@ export function OrganizationJsonLd() {
   const data = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "Profy Skill Academy",
+    name: "Dera Skul",
     url: SITE_URL,
     logo: `${SITE_URL}/logo.png`,
     description: "Learn programming, languages, and professional skills with expert-led courses and AI-powered tutoring.",
     sameAs: [
-      "https://twitter.com/profyskillacademy",
-      "https://youtube.com/@profyskillacademy",
+      "https://twitter.com/deraskul",
+      "https://youtube.com/@deraskul",
     ],
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "customer support",
-      email: "support@profyskillacademy.com",
+      email: "support@deraskul.com",
     },
   };
   return <JsonLd data={data} />;
@@ -38,7 +38,7 @@ export function WebsiteJsonLd() {
   const data = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "Profy Skill Academy",
+    name: "Dera Skul",
     url: SITE_URL,
     potentialAction: {
       "@type": "SearchAction",
@@ -70,7 +70,7 @@ export function CourseJsonLd({ name, description, url, image, lessons, provider 
     url,
     provider: {
       "@type": "Organization",
-      name: provider || "Profy Skill Academy",
+      name: provider || "Dera Skul",
     },
     educationalLevel: "Beginner to Advanced",
     inLanguage: "en",
@@ -113,7 +113,7 @@ export function LessonJsonLd({ name, description, url, courseName, courseUrl, po
     position: position || 1,
     provider: {
       "@type": "Organization",
-      name: "Profy Skill Academy",
+      name: "Dera Skul",
     },
   };
   return <JsonLd data={data} />;

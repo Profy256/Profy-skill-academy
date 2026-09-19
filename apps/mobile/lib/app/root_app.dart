@@ -11,7 +11,7 @@ class ProfyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'Profy Skill Academy',
+      title: 'Dera Skul',
       debugShowCheckedModeBanner: false,
       theme: buildProfyTheme(),
       routerConfig: router,

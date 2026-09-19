@@ -34,5 +34,10 @@ class ApiError implements Exception {
   bool get isNotFound => statusCode == 404;
 
   @override
-  String toString() => 'ApiError($statusCode, $code, $message)';
+  String toString() {
+    if (statusCode == 0) {
+      return 'Cannot reach the server. Make sure the backend is running and your device is on the same network.';
+    }
+    return 'ApiError($statusCode, $code, $message)';
+  }
 }

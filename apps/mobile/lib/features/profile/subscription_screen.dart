@@ -29,7 +29,7 @@ class SubscriptionScreen extends ConsumerWidget {
               const EmptyState(
                 icon: Icons.workspace_premium,
                 title: 'You are Premium 🎉',
-                subtitle: 'Your learning is ad-free. Thank you for supporting Profy!',
+                subtitle: 'Your learning is ad-free. Thank you for supporting Dera Skul!',
               ),
               if (e.currentPeriodEnd != null)
                 Padding(

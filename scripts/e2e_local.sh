@@ -66,7 +66,7 @@ check "review queue does not contain the fresh lesson" \
 step "8. Attach curated video → becomes primary"
 vid=$(curl -sf -X POST "$API_BASE/api/v1/admin/lessons/$lesson_id/videos" \
   -H "$AUTH" -H 'Content-Type: application/json' \
-  -d '{"youtubeVideoId":"dQw4w9WgXcQ","title":"E2E Curated Video","channel":"Profy","curatorStatus":"approved","isPrimary":true}' || echo FAIL)
+  -d '{"youtubeVideoId":"dQw4w9WgXcQ","title":"E2E Curated Video","channel":"Dera Skul","curatorStatus":"approved","isPrimary":true}' || echo FAIL)
 video_id=$(echo "$vid" | jq -r '.id // empty')
 check "video attached" '[ -n "$video_id" ]'
 after=$(curl -sf "$API_BASE/api/v1/lessons/$lesson_slug" || echo FAIL)

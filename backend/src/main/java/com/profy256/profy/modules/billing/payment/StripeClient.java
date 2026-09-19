@@ -46,7 +46,7 @@ public class StripeClient {
                                     .build())
                             .setUnitAmount(999L) // $9.99/month
                             .setProductData(SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                    .setName("Profy Skill Academy Premium")
+                                    .setName("Dera Skul Premium")
                                     .build())
                             .build())
                     .setQuantity(Long.valueOf(1))

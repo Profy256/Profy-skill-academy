@@ -1,4 +1,4 @@
-# Profy Skill Academy — Build Plan (todo.md)
+# Dera Skul — Build Plan (todo.md)
 
 **Companion to:** `docs/TECHNICAL_DOC.md` (the "how") · **Source:** `profy_skill_academy_prd.md`
 **Rule:** work top-to-bottom. Each milestone has a Definition of Done (DoD) — don't start the

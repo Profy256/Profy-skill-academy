@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Profy Admin — Content Management",
-  description: "Internal content management for Profy Skill Academy",
+  title: "Dera Admin — Content Management",
+  description: "Internal content management for Dera Skul",
 };
 
 export default function RootLayout({
