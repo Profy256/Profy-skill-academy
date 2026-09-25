@@ -2,22 +2,27 @@ package com.profy256.profy.modules.ai.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public class AiProviderDto {
 
+    public static final String PROVIDER_TYPES =
+            "OPENAI|ANTHROPIC|GEMINI|DEEPSEEK|OPENROUTER|CUSTOM";
+
     public record CreateProviderRequest(
             @NotBlank String name,
-            @NotBlank @Pattern(regexp = "OPENAI|ANTHROPIC|GEMINI|CUSTOM") String providerType,
-            @NotBlank String apiKey,
+            @NotBlank @Pattern(regexp = PROVIDER_TYPES) String providerType,
+            String apiKey,
             @NotBlank String baseUrl,
             @NotBlank String defaultModel
     ) {}
 
     public record UpdateProviderRequest(
             String name,
-            String providerType,
+            @Pattern(regexp = PROVIDER_TYPES) String providerType,
             String apiKey,
             String baseUrl,
             String defaultModel,
@@ -31,7 +36,25 @@ public class AiProviderDto {
             String baseUrl,
             String defaultModel,
             Boolean isActive,
-            String apiKeyMasked
+            String apiKeyMasked,
+            int keyCount
+    ) {}
+
+    public record CreateKeyRequest(
+            @NotBlank String apiKey,
+            @Size(max = 100) String label
+    ) {}
+
+    public record KeyResponse(
+            UUID id,
+            UUID providerId,
+            String label,
+            String apiKeyMasked,
+            Boolean isActive,
+            Integer failureCount,
+            Instant disabledUntil,
+            String lastError,
+            Instant lastUsedAt
     ) {}
 
     public record SettingsResponse(

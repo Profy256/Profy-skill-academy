@@ -41,7 +41,7 @@ public class AdminAuthService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminLoginResponse login(String email, String password) {
         AdminUser admin = adminUserRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
@@ -107,12 +107,22 @@ public class AdminAuthService {
     }
 
     private User resolveUserForToken(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseGet(() -> {
-                    AdminUser admin = adminUserRepository.findById(userId).orElseThrow();
-                    User synthetic = new User(admin.getEmail(), admin.getPasswordHash(), admin.getName());
-                    synthetic.setId(admin.getId());
-                    return userRepository.save(synthetic);
-                });
+        java.util.Optional<User> existing = userRepository.findById(userId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        AdminUser admin = adminUserRepository.findById(userId).orElseThrow();
+
+        // A consumer account may already use this email (emails are globally unique) —
+        // reuse it as the token's user instead of inserting a conflicting synthetic row.
+        java.util.Optional<User> byEmail = userRepository.findByEmail(admin.getEmail());
+        if (byEmail.isPresent()) {
+            return byEmail.get();
+        }
+
+        User synthetic = new User(admin.getEmail(), admin.getPasswordHash(), admin.getName());
+        synthetic.setId(admin.getId());
+        return userRepository.save(synthetic);
     }
 }

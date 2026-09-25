@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
@@ -69,12 +71,30 @@ public class OpenAiCompatibleProvider implements LLMProvider {
             }
         } catch (ResourceAccessException e) {
             log.error("AI provider unreachable: {}", e.getMessage());
-            throw new AiUnavailableException("AI service is temporarily unavailable");
+            throw new AiUnavailableException("AI provider is temporarily unavailable",
+                    AiUnavailableException.Reason.NETWORK);
         } catch (AiUnavailableException e) {
             throw e;
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            log.warn("{} rejected API key ({})", "AI provider", e.getStatusCode().value());
+            throw new AiUnavailableException("API key rejected by AI provider",
+                    AiUnavailableException.Reason.AUTH);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn("{} rate limited", "AI provider");
+            throw new AiUnavailableException("AI provider rate limit reached",
+                    AiUnavailableException.Reason.RATE_LIMIT);
+        } catch (HttpClientErrorException e) {
+            log.error("{} client error: {}", "AI provider", e.getStatusCode());
+            throw new AiUnavailableException("AI provider returned status " + e.getStatusCode().value(),
+                    AiUnavailableException.Reason.OTHER);
+        } catch (HttpServerErrorException e) {
+            log.error("{} server error: {}", "AI provider", e.getStatusCode());
+            throw new AiUnavailableException("AI provider is having server trouble",
+                    AiUnavailableException.Reason.NETWORK);
         } catch (Exception e) {
-            log.error("AI provider error: {}", e.getMessage());
-            throw new AiUnavailableException("AI service encountered an error");
+            log.error("{} error: {}", "AI provider", e.getMessage());
+            throw new AiUnavailableException("AI provider encountered an error",
+                    AiUnavailableException.Reason.OTHER);
         }
     }
 }

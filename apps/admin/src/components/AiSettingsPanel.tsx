@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api, type AiProviderApi, type AiSettingsApi } from "@/lib/api";
+import { api, type AiProviderApi, type AiProviderKeyApi, type AiSettingsApi } from "@/lib/api";
 
-const PROVIDER_PRESETS: Record<string, { baseUrl: string; model: string }> = {
-  OPENAI: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-  ANTHROPIC: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-4-20250514" },
-  GEMINI: { baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.0-flash" },
-  CUSTOM: { baseUrl: "", model: "" },
+const PROVIDER_PRESETS: Record<string, { baseUrl: string; model: string; label: string }> = {
+  OPENAI: { baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", label: "OpenAI" },
+  ANTHROPIC: { baseUrl: "https://api.anthropic.com/v1", model: "claude-sonnet-4-20250514", label: "Anthropic (Claude)" },
+  GEMINI: { baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.0-flash", label: "Google Gemini" },
+  DEEPSEEK: { baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", label: "DeepSeek" },
+  OPENROUTER: { baseUrl: "https://openrouter.ai/api/v1", model: "openrouter/auto", label: "OpenRouter (auto)" },
+  CUSTOM: { baseUrl: "", model: "", label: "Custom (OpenAI-compatible)" },
 };
 
 export default function AiSettingsPanel() {
@@ -19,6 +21,10 @@ export default function AiSettingsPanel() {
   const [testMsg, setTestMsg] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+
+  const [keys, setKeys] = useState<AiProviderKeyApi[]>([]);
+  const [keyForm, setKeyForm] = useState({ apiKey: "", label: "" });
+  const [savingKey, setSavingKey] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -41,6 +47,50 @@ export default function AiSettingsPanel() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const fetchKeys = useCallback(async (providerId: string) => {
+    try {
+      setKeys(await api.aiProviders.keys(providerId));
+    } catch (err) {
+      console.error("Failed to load API keys", err);
+      setKeys([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (editingId) fetchKeys(editingId);
+    else setKeys([]);
+  }, [editingId, fetchKeys]);
+
+  const handleAddKey = async () => {
+    if (!editingId || !keyForm.apiKey.trim()) return;
+    setSavingKey(true);
+    try {
+      await api.aiProviders.addKey(editingId, {
+        apiKey: keyForm.apiKey.trim(),
+        label: keyForm.label.trim() || undefined,
+      });
+      setKeyForm({ apiKey: "", label: "" });
+      await fetchKeys(editingId);
+      fetchAll();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add key");
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const handleDeleteKey = async (keyId: string) => {
+    if (!editingId) return;
+    if (!confirm("Remove this API key?")) return;
+    try {
+      await api.aiProviders.deleteKey(editingId, keyId);
+      await fetchKeys(editingId);
+      fetchAll();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete key");
+    }
+  };
 
   const handleTypeChange = (type: string) => {
     const preset = PROVIDER_PRESETS[type] || PROVIDER_PRESETS.CUSTOM;
@@ -72,6 +122,7 @@ export default function AiSettingsPanel() {
       baseUrl: p.baseUrl,
       defaultModel: p.defaultModel,
     });
+    setKeyForm({ apiKey: "", label: "" });
     setEditingId(p.id);
     setShowForm(true);
   };
@@ -175,7 +226,9 @@ export default function AiSettingsPanel() {
                     )}
                   </div>
                   <div className="font-mono text-xs" style={{ color: "var(--text-3)" }}>{p.providerType} — {p.defaultModel}</div>
-                  <div className="font-mono text-xs mt-1" style={{ color: "var(--text-faint)" }}>{p.apiKeyMasked}</div>
+                  <div className="font-mono text-xs mt-1" style={{ color: "var(--text-faint)" }}>
+                    {p.keyCount} key{p.keyCount === 1 ? "" : "s"} · {p.apiKeyMasked}
+                  </div>
                 </div>
               );
             })
@@ -225,26 +278,33 @@ export default function AiSettingsPanel() {
                   className="w-full px-3 py-2 text-sm font-mono outline-none cursor-pointer"
                   style={{ ...inputStyle, appearance: "auto" }}
                 >
-                  <option value="OPENAI">OpenAI / OpenRouter</option>
+                  <option value="OPENAI">OpenAI</option>
                   <option value="ANTHROPIC">Anthropic (Claude)</option>
                   <option value="GEMINI">Google Gemini</option>
+                  <option value="DEEPSEEK">DeepSeek</option>
+                  <option value="OPENROUTER">OpenRouter (auto)</option>
                   <option value="CUSTOM">Custom (OpenAI-compatible)</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block font-mono text-xs tracking-wider mb-1.5" style={{ color: "var(--text-2)" }}>API KEY</label>
-                <input
-                  type="password"
-                  value={form.apiKey}
-                  onChange={(e) => setForm(prev => ({ ...prev, apiKey: e.target.value }))}
-                  placeholder={editingId ? "Leave blank to keep current" : "sk-..."}
-                  className="w-full px-3 py-2 text-sm font-mono outline-none transition-colors"
-                  style={inputStyle}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
-                />
-              </div>
+              {!editingId && (
+                <div>
+                  <label className="block font-mono text-xs tracking-wider mb-1.5" style={{ color: "var(--text-2)" }}>API KEY</label>
+                  <input
+                    type="password"
+                    value={form.apiKey}
+                    onChange={(e) => setForm(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 text-sm font-mono outline-none transition-colors"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                  />
+                  <div className="font-mono text-xs mt-1" style={{ color: "var(--text-faint)" }}>
+                    You can add more keys after saving — the healthiest one is used automatically.
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block font-mono text-xs tracking-wider mb-1.5" style={{ color: "var(--text-2)" }}>BASE URL</label>
@@ -299,6 +359,85 @@ export default function AiSettingsPanel() {
                 )}
               </div>
             </div>
+
+            {/* API keys (edit mode) */}
+            {editingId && (
+              <div className="mt-8 pt-6 border-t" style={{ borderColor: "var(--border)" }}>
+                <div className="font-mono text-xs tracking-wider mb-3" style={{ color: "var(--text-2)" }}>
+                  API KEYS ({keys.length}) — THE HEALTHIEST KEY IS USED AUTOMATICALLY
+                </div>
+                {keys.length === 0 ? (
+                  <div className="font-mono text-xs mb-3" style={{ color: "var(--text-3)" }}>No keys yet</div>
+                ) : (
+                  <div className="space-y-2 mb-4">
+                    {keys.map((k) => {
+                      const cooling = k.disabledUntil && new Date(k.disabledUntil).getTime() > Date.now();
+                      return (
+                        <div key={k.id} className="flex items-center gap-3 px-3 py-2" style={{ border: "1px solid var(--border)", borderRadius: "3px", background: "var(--panel-2)" }}>
+                          <span className="font-mono text-xs" style={{ color: "var(--text-2)" }}>
+                            {k.label || "key"} · {k.apiKeyMasked}
+                          </span>
+                          <span
+                            className="font-mono px-1.5 py-0.5 rounded-sm"
+                            style={{
+                              fontSize: "9px",
+                              background: cooling ? "var(--badge-danger-bg)" : "var(--badge-success-bg)",
+                              color: cooling ? "var(--badge-danger-text)" : "var(--badge-success-text)",
+                            }}
+                          >
+                            {cooling ? "COOLING DOWN" : k.failureCount > 0 ? "RECOVERED" : "HEALTHY"}
+                          </span>
+                          {k.lastError && (
+                            <span className="font-mono text-xs truncate flex-1" style={{ color: "var(--text-faint)" }} title={k.lastError}>
+                              {k.lastError}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteKey(k.id)}
+                            className="font-mono text-xs ml-auto shrink-0"
+                            style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer" }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={keyForm.apiKey}
+                    onChange={(e) => setKeyForm(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder="Add another API key (sk-...)"
+                    className="flex-1 px-3 py-2 text-sm font-mono outline-none transition-colors"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                  />
+                  <input
+                    value={keyForm.label}
+                    onChange={(e) => setKeyForm(prev => ({ ...prev, label: e.target.value }))}
+                    placeholder="label"
+                    className="w-28 px-3 py-2 text-sm font-mono outline-none transition-colors"
+                    style={inputStyle}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "var(--accent)"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                  />
+                  <button
+                    onClick={handleAddKey}
+                    disabled={savingKey || !keyForm.apiKey.trim()}
+                    className="px-4 py-2 text-xs font-mono rounded-sm transition-colors disabled:opacity-40"
+                    style={{ background: "var(--accent)", color: "#000" }}
+                  >
+                    {savingKey ? "Adding..." : "Add Key"}
+                  </button>
+                </div>
+                <div className="font-mono text-xs mt-2" style={{ color: "var(--text-faint)" }}>
+                  Keys rejected by the provider (401/403) cool down for 15 min; rate-limited keys (429) for 60 s. Failover is automatic.
+                </div>
+              </div>
+            )}
 
             {/* Test section */}
             <div className="mt-8 pt-6 border-t" style={{ borderColor: "var(--border)" }}>

@@ -1,4 +1,4 @@
-import { getAccessToken, refreshTokens, saveTokens, clearTokens, getTokens } from "./auth";
+import { getAccessToken, refreshTokens, saveTokens, clearTokens, getTokens, apiErrorMessage } from "./auth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8082";
 
@@ -85,7 +85,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message || err.error || `API ${res.status}: ${res.statusText}`);
+    throw new Error(apiErrorMessage(err, `API ${res.status}: ${res.statusText}`));
   }
   return res.json();
 }

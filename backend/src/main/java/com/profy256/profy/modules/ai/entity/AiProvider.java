@@ -18,9 +18,6 @@ public class AiProvider {
     @Column(name = "provider_type", nullable = false, length = 20)
     private String providerType;
 
-    @Column(name = "api_key_encrypted", nullable = false, columnDefinition = "text")
-    private String apiKeyEncrypted;
-
     @Column(name = "base_url", nullable = false, length = 500)
     private String baseUrl;
 
@@ -54,8 +51,6 @@ public class AiProvider {
     public void setName(String name) { this.name = name; }
     public String getProviderType() { return providerType; }
     public void setProviderType(String providerType) { this.providerType = providerType; }
-    public String getApiKeyEncrypted() { return apiKeyEncrypted; }
-    public void setApiKeyEncrypted(String apiKeyEncrypted) { this.apiKeyEncrypted = apiKeyEncrypted; }
     public String getBaseUrl() { return baseUrl; }
     public void setBaseUrl(String baseUrl) { this.baseUrl = baseUrl; }
     public String getDefaultModel() { return defaultModel; }

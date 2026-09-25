@@ -1,21 +1,105 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8082";
 
+const TOKEN_KEY = "admin_token";
+const REFRESH_KEY = "admin_refresh_token";
+
 let accessToken: string | null = null;
 
 export function setToken(token: string | null) {
   accessToken = token;
   if (token) {
-    localStorage.setItem("admin_token", token);
+    localStorage.setItem(TOKEN_KEY, token);
   } else {
-    localStorage.removeItem("admin_token");
+    localStorage.removeItem(TOKEN_KEY);
   }
 }
 
 export function getToken(): string | null {
   if (!accessToken) {
-    accessToken = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+    accessToken = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
   }
   return accessToken;
+}
+
+export function setRefreshToken(token: string | null) {
+  if (typeof window === "undefined") return;
+  if (token) {
+    localStorage.setItem(REFRESH_KEY, token);
+  } else {
+    localStorage.removeItem(REFRESH_KEY);
+  }
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_KEY);
+}
+
+export function clearSession() {
+  setToken(null);
+  setRefreshToken(null);
+}
+
+async function tryRefresh(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/admin/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { accessToken?: string; refreshToken?: string };
+    if (!data.accessToken) return false;
+    setToken(data.accessToken);
+    setRefreshToken(data.refreshToken ?? null);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const doFetch = (token: string | null) => {
+    const headers: Record<string, string> = {
+      ...((init.headers as Record<string, string>) ?? {}),
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return fetch(`${API_BASE}${path}`, { ...init, headers });
+  };
+
+  const hadSession = Boolean(getToken() || getRefreshToken());
+  const isAuthCall = path.startsWith("/api/v1/admin/auth/");
+
+  let res = await doFetch(getToken());
+
+  if (res.status === 401 && hadSession && !isAuthCall) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      res = await doFetch(getToken());
+    }
+    if (res.status === 401) {
+      clearSession();
+      window.location.reload();
+      throw new Error("Session expired — please sign in again");
+    }
+  }
+
+  return res;
+}
+
+function apiErrorMessage(body: unknown, fallback: string): string {
+  if (body && typeof body === "object") {
+    const b = body as { message?: unknown; error?: unknown };
+    if (typeof b.message === "string" && b.message) return b.message;
+    if (typeof b.error === "string" && b.error) return b.error;
+    if (b.error && typeof b.error === "object") {
+      const nested = (b.error as { message?: unknown }).message;
+      if (typeof nested === "string" && nested) return nested;
+    }
+  }
+  return fallback;
 }
 
 interface RequestOptions extends Omit<RequestInit, "body"> {
@@ -24,44 +108,62 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, ...init } = options;
-  const token = getToken();
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(init.headers as Record<string, string>),
-  };
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await authFetch(path, {
     ...init,
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      ...((init.headers as Record<string, string>) ?? {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) {
-    setToken(null);
-    window.location.reload();
-    throw new Error("Unauthorized");
-  }
-
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(error.message || error.error || `HTTP ${res.status}`);
+    throw new Error(apiErrorMessage(error, `HTTP ${res.status}`));
   }
 
   return res.json();
 }
 
+export interface AdminLoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  adminUser: { id: string; email: string; name: string; role: string };
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
-      request<{ accessToken: string; refreshToken: string; admin: { id: string; email: string; name: string; role: string } }>(
+      request<AdminLoginResponse>(
         "/api/v1/admin/auth/login",
         { method: "POST", body: { email, password } }
       ),
+    logout: async () => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return;
+      try {
+        await fetch(`${API_BASE}/api/v1/admin/auth/logout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+      } catch {
+        // Best-effort — local session is cleared regardless.
+      }
+    },
+  },
+
+  autoCuration: {
+    getSettings: () =>
+      request<AutoCurationSettingsApi>("/api/v1/admin/settings/auto-curation"),
+    updateSettings: (enabled: boolean) =>
+      request<AutoCurationSettingsApi>("/api/v1/admin/settings/auto-curation", {
+        method: "PUT",
+        body: { enabled },
+      }),
   },
 
   taxonomy: {
@@ -77,6 +179,13 @@ export const api = {
       request<{ status: string }>("/api/v1/admin/taxonomy/reorder", { method: "POST", body: { items } }),
     delete: (id: string) =>
       request<{ status: string }>(`/api/v1/admin/taxonomy/${id}`, { method: "DELETE" }),
+    bulkCreate: (data: { categoryName: string; categoryDescription?: string; categoryIcon?: string; subcategories?: string[] }) =>
+      request<BulkTaxonomyResponse>("/api/v1/admin/taxonomy/bulk-create", { method: "POST", body: data }),
+    bulkAddCourses: (parentSubcategoryId: string, courseNames: string[]) =>
+      request<CourseResult[]>(`/api/v1/admin/taxonomy/bulk-add-courses/${parentSubcategoryId}`, {
+        method: "POST",
+        body: courseNames
+      }),
   },
 
   lessons: {
@@ -129,12 +238,18 @@ export const api = {
       request<AiProviderApi[]>("/api/v1/admin/ai-providers"),
     get: (id: string) =>
       request<AiProviderApi>(`/api/v1/admin/ai-providers/${id}`),
-    create: (data: { name: string; providerType: string; apiKey: string; baseUrl: string; defaultModel: string }) =>
+    create: (data: { name: string; providerType: string; apiKey?: string; baseUrl: string; defaultModel: string }) =>
       request<AiProviderApi>("/api/v1/admin/ai-providers", { method: "POST", body: data }),
     update: (id: string, data: { name?: string; providerType?: string; apiKey?: string; baseUrl?: string; defaultModel?: string; isActive?: boolean }) =>
       request<AiProviderApi>(`/api/v1/admin/ai-providers/${id}`, { method: "PUT", body: data }),
     delete: (id: string) =>
       request<{ status: string }>(`/api/v1/admin/ai-providers/${id}`, { method: "DELETE" }),
+    keys: (id: string) =>
+      request<AiProviderKeyApi[]>(`/api/v1/admin/ai-providers/${id}/keys`),
+    addKey: (id: string, data: { apiKey: string; label?: string }) =>
+      request<AiProviderKeyApi>(`/api/v1/admin/ai-providers/${id}/keys`, { method: "POST", body: data }),
+    deleteKey: (id: string, keyId: string) =>
+      request<{ status: string }>(`/api/v1/admin/ai-providers/${id}/keys/${keyId}`, { method: "DELETE" }),
     getSettings: () =>
       request<AiSettingsApi>("/api/v1/admin/ai-providers/settings"),
     updateSettings: (data: { activeProviderId: string | null }) =>
@@ -163,6 +278,37 @@ export const api = {
       request<{ status: string }>(`/api/v1/admin/campus-books/${campusBookId}/settings`, { method: "PUT", body: data }),
     sync: () =>
       request<CampusBookSyncResult>("/api/v1/admin/campus-books/sync", { method: "POST" }),
+  },
+
+  import: {
+    youtube: (youtubeUrl: string, courseId: string) =>
+      request<ImportYouTubeResponse>("/api/v1/admin/import/youtube", {
+        method: "POST",
+        body: { youtubeUrl, courseId }
+      }),
+    fromUrl: (url: string, courseId: string) =>
+      request<ImportUrlResponse>("/api/v1/admin/import/url", {
+        method: "POST",
+        body: { url, courseId }
+      }),
+    fromFile: async (file: File, courseId: string, lessonCount?: number) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("courseId", courseId);
+      if (lessonCount) formData.append("lessonCount", String(lessonCount));
+
+      const res = await authFetch("/api/v1/admin/import/file", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(apiErrorMessage(error, `HTTP ${res.status}`));
+      }
+
+      return res.json() as Promise<ImportFileResponse>;
+    },
   },
 };
 
@@ -292,11 +438,29 @@ export interface AiProviderApi {
   defaultModel: string;
   isActive: boolean;
   apiKeyMasked: string;
+  keyCount: number;
+}
+
+export interface AiProviderKeyApi {
+  id: string;
+  providerId: string;
+  label: string | null;
+  apiKeyMasked: string;
+  isActive: boolean;
+  failureCount: number;
+  disabledUntil: string | null;
+  lastError: string | null;
+  lastUsedAt: string | null;
 }
 
 export interface AiSettingsApi {
   activeProviderId: string | null;
   activeProviderName: string | null;
+}
+
+export interface AutoCurationSettingsApi {
+  enabled: boolean;
+  keyConfigured: boolean;
 }
 
 export interface AiTestResultApi {
@@ -309,6 +473,53 @@ export interface AiAssistantResponse {
   content: string;
   actionType: string | null;
   actionResult: Record<string, unknown> | null;
+}
+
+export interface BulkTaxonomyResponse {
+  categoryId: string;
+  categorySlug: string;
+  subcategories: {
+    subcategoryId: string;
+    subcategorySlug: string;
+    courses: {
+      courseId: string;
+      courseSlug: string;
+      name: string;
+    }[];
+  }[];
+}
+
+export interface CourseResult {
+  courseId: string;
+  courseSlug: string;
+  name: string;
+}
+
+export interface ImportYouTubeResponse {
+  lessonId: string;
+  title: string;
+  slug: string;
+  videoId: string;
+  channel: string;
+  status: string;
+}
+
+export interface ImportUrlResponse {
+  lessonId: string;
+  title: string;
+  slug: string;
+  status: string;
+  message: string;
+}
+
+export interface ImportFileResponse {
+  lessons: {
+    lessonId: string;
+    title: string;
+    slug: string;
+    status: string;
+  }[];
+  message: string;
 }
 
 export interface CampusBookApi {

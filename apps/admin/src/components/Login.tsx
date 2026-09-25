@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, setToken } from "@/lib/api";
+import { api, setToken, setRefreshToken } from "@/lib/api";
 
 interface Props {
   onAuth: () => void;
@@ -25,6 +25,7 @@ export default function Login({ onAuth }: Props) {
     try {
       const result = await api.auth.login(email, password);
       setToken(result.accessToken);
+      setRefreshToken(result.refreshToken);
       onAuth();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Check your credentials.");

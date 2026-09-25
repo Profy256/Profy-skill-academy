@@ -40,6 +40,7 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/profy
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
+      PROFY_AI_ENCRYPTION_KEY: ${PROFY_AI_ENCRYPTION_KEY:-}
       # AI — any OpenAI-compatible provider (OpenRouter, OpenAI, Gemini, Groq, Together, etc.)
       AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
       AI_API_KEY: ${AI_API_KEY:-}
@@ -56,7 +57,7 @@ services:
       MARZPAY_CALLBACK_URL: ${MARZPAY_CALLBACK_URL:-}
       # Other
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3003}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3002,http://localhost:3003}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       ADMIN_ORIGIN: ${ADMIN_ORIGIN:-http://localhost:3003}
     ports:
@@ -81,6 +82,8 @@ services:
       AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
       # Stripe
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      # Auto video curation (YouTube Data API v3)
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       # MarzPay
       MARZPAY_BASE_URL: ${MARZPAY_BASE_URL:-https://wallet.wearemarz.com/api/v1}
       MARZPAY_API_KEY: ${MARZPAY_API_KEY:-}

@@ -57,7 +57,7 @@ public class AuthService {
         return issueTokenPair(user.getId(), user.getEmail(), request.device());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenPairResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));

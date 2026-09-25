@@ -167,7 +167,10 @@ public class LessonsService {
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson not found"));
 
         if (!autoCurationService.isEnabled()) {
-            throw new BadRequestException("YOUTUBE_API_KEY is not configured — automatic curation is disabled");
+            if (!autoCurationService.isConfigured()) {
+                throw new BadRequestException("YOUTUBE_API_KEY is not configured — automatic curation is unavailable");
+            }
+            throw new BadRequestException("Automatic curation is turned off — enable it from the admin dashboard");
         }
 
         LessonVideo video = autoCurationService.autoCurateForLesson(lessonId);

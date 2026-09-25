@@ -1,6 +1,8 @@
 package com.profy256.profy.modules.ai.controller;
 
+import com.profy256.profy.modules.ai.dto.AiProviderDto.CreateKeyRequest;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.CreateProviderRequest;
+import com.profy256.profy.modules.ai.dto.AiProviderDto.KeyResponse;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.ProviderResponse;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.SettingsResponse;
 import com.profy256.profy.modules.ai.dto.AiProviderDto.TestProviderRequest;
@@ -59,6 +61,28 @@ public class AiProviderController {
     @Audited
     public ResponseEntity<Map<String, String>> delete(@PathVariable UUID id) {
         providerService.deleteProvider(id);
+        return ResponseEntity.ok(Map.of("status", "deleted"));
+    }
+
+    @GetMapping("/{id}/keys")
+    public ResponseEntity<List<KeyResponse>> listKeys(@PathVariable UUID id) {
+        return ResponseEntity.ok(providerService.listKeys(id));
+    }
+
+    @PostMapping("/{id}/keys")
+    @Audited
+    public ResponseEntity<KeyResponse> addKey(
+            @PathVariable UUID id,
+            @Valid @RequestBody CreateKeyRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(providerService.addKey(id, request));
+    }
+
+    @DeleteMapping("/{id}/keys/{keyId}")
+    @Audited
+    public ResponseEntity<Map<String, String>> deleteKey(
+            @PathVariable UUID id,
+            @PathVariable UUID keyId) {
+        providerService.deleteKey(id, keyId);
         return ResponseEntity.ok(Map.of("status", "deleted"));
     }
 

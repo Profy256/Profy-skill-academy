@@ -1,5 +1,8 @@
 package com.profy256.profy.modules.taxonomy.controller;
 
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.BulkCreateRequest;
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.BulkCreateResponse;
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.CourseResult;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.ReorderRequest;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.TaxonomyCreateRequest;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.TaxonomyUpdateRequest;
@@ -71,5 +74,21 @@ public class AdminTaxonomyController {
     public ResponseEntity<Map<String, Object>> delete(@PathVariable UUID id) {
         taxonomyService.deleteNode(id);
         return ResponseEntity.ok(Map.of("status", "deleted"));
+    }
+
+    @PostMapping("/bulk-create")
+    @Audited
+    public ResponseEntity<BulkCreateResponse> bulkCreate(@RequestBody BulkCreateRequest request) {
+        BulkCreateResponse response = taxonomyService.bulkCreate(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/bulk-add-courses/{parentSubcategoryId}")
+    @Audited
+    public ResponseEntity<List<CourseResult>> bulkAddCourses(
+            @PathVariable String parentSubcategoryId,
+            @RequestBody List<String> courseNames) {
+        List<CourseResult> results = taxonomyService.bulkAddCourses(parentSubcategoryId, courseNames);
+        return ResponseEntity.status(HttpStatus.CREATED).body(results);
     }
 }

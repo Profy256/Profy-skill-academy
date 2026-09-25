@@ -1,7 +1,11 @@
 package com.profy256.profy.modules.taxonomy.service;
 
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.BulkCreateRequest;
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.BulkCreateResponse;
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.CourseResult;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.ReorderItem;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.ReorderRequest;
+import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.SubcategoryResult;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.TaxonomyCreateRequest;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.TaxonomyUpdateRequest;
 import com.profy256.profy.modules.taxonomy.entity.TaxonomyNode;
@@ -9,8 +13,10 @@ import com.profy256.profy.modules.taxonomy.repository.TaxonomyNodeRepository;
 import com.profy256.profy.platform.error.BadRequestException;
 import com.profy256.profy.platform.error.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -150,6 +156,77 @@ public class TaxonomyService {
         }
 
         taxonomyNodeRepository.delete(node);
+    }
+
+    @Transactional
+    public BulkCreateResponse bulkCreate(BulkCreateRequest request) {
+        // Create the category
+        String categorySlug = slugify(request.categoryName());
+        TaxonomyCreateRequest catReq = new TaxonomyCreateRequest(
+                null, "category", request.categoryName(), categorySlug,
+                request.categoryDescription() != null ? request.categoryDescription() : "",
+                request.categoryIcon() != null ? request.categoryIcon() : "",
+                1, true, 0);
+        TaxonomyNode category = taxonomyNodeRepository.save(toNode(catReq));
+
+        List<SubcategoryResult> subcategoryResults = new ArrayList<>();
+
+        if (request.subcategories() != null) {
+            int subSortOrder = 0;
+            for (String subName : request.subcategories()) {
+                String subSlug = slugify(subName);
+                TaxonomyCreateRequest subReq = new TaxonomyCreateRequest(
+                        category.getId().toString(), "subcategory", subName, subSlug,
+                        "", "", 1, true, subSortOrder++);
+                TaxonomyNode subcategory = taxonomyNodeRepository.save(toNode(subReq));
+                subcategoryResults.add(new SubcategoryResult(
+                        subcategory.getId().toString(), subcategory.getSlug(), new ArrayList<>()));
+            }
+        }
+
+        return new BulkCreateResponse(category.getId().toString(), category.getSlug(), subcategoryResults);
+    }
+
+    @Transactional
+    public List<CourseResult> bulkAddCourses(String parentSubcategoryId, List<String> courseNames) {
+        UUID parentId = UUID.fromString(parentSubcategoryId);
+        TaxonomyNode parent = taxonomyNodeRepository.findById(parentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parent node not found"));
+
+        List<CourseResult> results = new ArrayList<>();
+        int sortOrder = 0;
+        for (String name : courseNames) {
+            String slug = slugify(name);
+            TaxonomyCreateRequest req = new TaxonomyCreateRequest(
+                    parentId.toString(), "course", name, slug,
+                    "", "", parent.getPhase(), true, sortOrder++);
+            TaxonomyNode course = taxonomyNodeRepository.save(toNode(req));
+            results.add(new CourseResult(course.getId().toString(), course.getSlug(), course.getName()));
+        }
+        return results;
+    }
+
+    private TaxonomyNode toNode(TaxonomyCreateRequest req) {
+        TaxonomyNode node = new TaxonomyNode();
+        node.setId(UUID.randomUUID());
+        node.setParentId(req.parentNodeId() != null && !req.parentNodeId().isBlank()
+                ? UUID.fromString(req.parentNodeId()) : null);
+        node.setNodeType(req.nodeType());
+        node.setName(req.name());
+        node.setSlug(req.slug());
+        node.setDescription(req.description());
+        node.setIcon(req.icon());
+        node.setPhase(req.phase() != null ? req.phase() : 1);
+        node.setIsActive(req.isActive() != null ? req.isActive() : true);
+        node.setSortOrder(req.sortOrder() != null ? req.sortOrder() : 0);
+        node.setDepth(req.parentNodeId() != null && !req.parentNodeId().isBlank()
+                ? calculateDepth(UUID.fromString(req.parentNodeId())) + 1 : 0);
+        return node;
+    }
+
+    private String slugify(String text) {
+        return Pattern.compile("[^a-z0-9]+").matcher(text.toLowerCase().trim())
+                .replaceAll("-").replaceAll("^-|-$", "");
     }
 
     private List<Map<String, Object>> buildTree(List<TaxonomyNode> nodes) {

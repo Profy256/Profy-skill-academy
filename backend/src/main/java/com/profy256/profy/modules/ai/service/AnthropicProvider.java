@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
@@ -65,13 +67,31 @@ public class AnthropicProvider implements LLMProvider {
                 throw new AiUnavailableException("Anthropic API returned status: " + response.getStatusCode());
             }
         } catch (ResourceAccessException e) {
-            log.error("Anthropic provider unreachable: {}", e.getMessage());
-            throw new AiUnavailableException("Anthropic service is temporarily unavailable");
+            log.error("Anthropic unreachable: {}", e.getMessage());
+            throw new AiUnavailableException("Anthropic is temporarily unavailable",
+                    AiUnavailableException.Reason.NETWORK);
         } catch (AiUnavailableException e) {
             throw e;
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden e) {
+            log.warn("{} rejected API key ({})", "Anthropic", e.getStatusCode().value());
+            throw new AiUnavailableException("API key rejected by Anthropic",
+                    AiUnavailableException.Reason.AUTH);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            log.warn("{} rate limited", "Anthropic");
+            throw new AiUnavailableException("Anthropic rate limit reached",
+                    AiUnavailableException.Reason.RATE_LIMIT);
+        } catch (HttpClientErrorException e) {
+            log.error("{} client error: {}", "Anthropic", e.getStatusCode());
+            throw new AiUnavailableException("Anthropic returned status " + e.getStatusCode().value(),
+                    AiUnavailableException.Reason.OTHER);
+        } catch (HttpServerErrorException e) {
+            log.error("{} server error: {}", "Anthropic", e.getStatusCode());
+            throw new AiUnavailableException("Anthropic is having server trouble",
+                    AiUnavailableException.Reason.NETWORK);
         } catch (Exception e) {
-            log.error("Anthropic provider error: {}", e.getMessage());
-            throw new AiUnavailableException("Anthropic service encountered an error");
+            log.error("{} error: {}", "Anthropic", e.getMessage());
+            throw new AiUnavailableException("Anthropic encountered an error",
+                    AiUnavailableException.Reason.OTHER);
         }
     }
 }

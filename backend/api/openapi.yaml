@@ -1093,6 +1093,51 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  # ------------------------------------------------------ auto-curation settings (admin)
+  /api/v1/admin/settings/auto-curation:
+    get:
+      tags: [admin]
+      summary: Auto-curation status — admin toggle and YouTube key availability
+      operationId: adminGetAutoCurationSettings
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCurationSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [admin]
+      summary: Enable or disable automatic video curation at runtime
+      operationId: adminUpdateAutoCurationSettings
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCurationSettings"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   # ------------------------------------------------------ review & audit (admin)
   /api/v1/admin/review/videos:
     get:
@@ -1969,6 +2014,17 @@ components:
           format: date
         notes:
           type: string
+
+    AutoCurationSettings:
+      type: object
+      description: Runtime state of automatic video curation.
+      properties:
+        enabled:
+          type: boolean
+          description: Admin toggle — when false, all curation paths no-op.
+        keyConfigured:
+          type: boolean
+          description: Whether YOUTUBE_API_KEY is present in the environment.
 
     UncoveredLessonItem:
       type: object

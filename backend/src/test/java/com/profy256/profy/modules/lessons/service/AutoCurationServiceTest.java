@@ -1,7 +1,9 @@
 package com.profy256.profy.modules.lessons.service;
 
+import com.profy256.profy.modules.lessons.entity.AutoCurationSettings;
 import com.profy256.profy.modules.lessons.entity.Lesson;
 import com.profy256.profy.modules.lessons.entity.LessonVideo;
+import com.profy256.profy.modules.lessons.repository.AutoCurationSettingsRepository;
 import com.profy256.profy.modules.lessons.repository.LessonRepository;
 import com.profy256.profy.modules.lessons.repository.LessonVideoRepository;
 import com.profy256.profy.modules.taxonomy.entity.TaxonomyNode;
@@ -37,6 +39,8 @@ class AutoCurationServiceTest {
     private TaxonomyNodeRepository taxonomyNodeRepository;
     @Mock
     private YouTubeSearchService youTubeSearchService;
+    @Mock
+    private AutoCurationSettingsRepository autoCurationSettingsRepository;
 
     @InjectMocks
     private AutoCurationService autoCurationService;
@@ -50,6 +54,12 @@ class AutoCurationServiceTest {
     void setUp() {
         nodeId = UUID.randomUUID();
         lessonId = UUID.randomUUID();
+
+        AutoCurationSettings settings = new AutoCurationSettings();
+        settings.setId(UUID.fromString("00000000-0000-0000-0000-000000000010"));
+        settings.setEnabled(true);
+        lenient().when(autoCurationSettingsRepository.findById(any()))
+                .thenReturn(Optional.of(settings));
 
         courseNode = new TaxonomyNode();
         courseNode.setId(nodeId);

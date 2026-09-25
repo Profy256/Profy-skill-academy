@@ -34,6 +34,19 @@ export function getAccessToken(): string | null {
   return getTokens()?.accessToken ?? null;
 }
 
+export function apiErrorMessage(body: unknown, fallback: string): string {
+  if (body && typeof body === "object") {
+    const b = body as { message?: unknown; error?: unknown };
+    if (typeof b.message === "string" && b.message) return b.message;
+    if (typeof b.error === "string" && b.error) return b.error;
+    if (b.error && typeof b.error === "object") {
+      const nested = (b.error as { message?: unknown }).message;
+      if (typeof nested === "string" && nested) return nested;
+    }
+  }
+  return fallback;
+}
+
 export async function register(
   name: string,
   email: string,
@@ -46,7 +59,7 @@ export async function register(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message || err.error || `Registration failed (${res.status})`);
+    throw new Error(apiErrorMessage(err, `Registration failed (${res.status})`));
   }
   return res.json();
 }
@@ -62,7 +75,7 @@ export async function login(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message || err.error || `Login failed (${res.status})`);
+    throw new Error(apiErrorMessage(err, `Login failed (${res.status})`));
   }
   return res.json();
 }
@@ -71,7 +84,7 @@ export async function refreshTokens(refreshToken: string): Promise<TokenPair> {
   const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    body: JSON.stringify({ refreshToken }),
   });
   if (!res.ok) throw new Error("Refresh failed");
   return res.json();
@@ -82,7 +95,7 @@ export async function logoutServer(refreshToken: string): Promise<void> {
     await fetch(`${API_BASE}/api/v1/auth/logout`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({ refreshToken }),
     });
   } catch {
     // Best-effort; local session is cleared regardless.

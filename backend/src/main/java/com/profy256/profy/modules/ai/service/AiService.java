@@ -43,10 +43,7 @@ public class AiService {
     private final AiChatMessageRepository messageRepository;
     private final LessonRepository lessonRepository;
     private final SubscriptionRepository subscriptionRepository;
-    private final AiProviderService providerService;
-    private final OpenAiCompatibleProvider openAiProvider;
-    private final AnthropicProvider anthropicProvider;
-    private final GeminiProvider geminiProvider;
+    private final LlmGateway llmGateway;
     private final AppConfig appConfig;
     private final StringRedisTemplate redisTemplate;
     private final CircuitBreaker circuitBreaker;
@@ -55,10 +52,7 @@ public class AiService {
                      AiChatMessageRepository messageRepository,
                      LessonRepository lessonRepository,
                      SubscriptionRepository subscriptionRepository,
-                     AiProviderService providerService,
-                     OpenAiCompatibleProvider openAiProvider,
-                     AnthropicProvider anthropicProvider,
-                     GeminiProvider geminiProvider,
+                     LlmGateway llmGateway,
                      AppConfig appConfig,
                      StringRedisTemplate redisTemplate,
                      CircuitBreaker circuitBreaker) {
@@ -66,10 +60,7 @@ public class AiService {
         this.messageRepository = messageRepository;
         this.lessonRepository = lessonRepository;
         this.subscriptionRepository = subscriptionRepository;
-        this.providerService = providerService;
-        this.openAiProvider = openAiProvider;
-        this.anthropicProvider = anthropicProvider;
-        this.geminiProvider = geminiProvider;
+        this.llmGateway = llmGateway;
         this.appConfig = appConfig;
         this.redisTemplate = redisTemplate;
         this.circuitBreaker = circuitBreaker;
@@ -139,31 +130,7 @@ public class AiService {
     }
 
     private ChatResponse callLlm(List<ChatMessage> messages, String systemPrompt) {
-        AiProviderService.ActiveProviderInfo active = providerService.getActiveProvider().orElse(null);
-
-        String apiKey, baseUrl, model;
-        if (active != null) {
-            apiKey = active.apiKey();
-            baseUrl = active.baseUrl();
-            model = active.defaultModel();
-        } else {
-            apiKey = appConfig.getAiApiKey();
-            baseUrl = appConfig.getAiBaseUrl();
-            model = appConfig.getAiModel();
-        }
-
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new AiUnavailableException("No AI API key configured. Add a provider in admin settings or set AI_API_KEY in .env");
-        }
-
-        String lowerUrl = baseUrl.toLowerCase();
-        if (lowerUrl.contains("anthropic")) {
-            return anthropicProvider.complete(messages, systemPrompt, apiKey, baseUrl, model);
-        } else if (lowerUrl.contains("google") || lowerUrl.contains("gemini")) {
-            return geminiProvider.complete(messages, systemPrompt, apiKey, baseUrl, model);
-        } else {
-            return openAiProvider.complete(messages, systemPrompt, apiKey, baseUrl, model);
-        }
+        return llmGateway.complete(messages, systemPrompt);
     }
 
     private void checkRateLimit(UUID userId) {

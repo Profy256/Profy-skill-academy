@@ -1,7 +1,9 @@
 package com.profy256.profy.modules.lessons.service;
 
+import com.profy256.profy.modules.lessons.entity.AutoCurationSettings;
 import com.profy256.profy.modules.lessons.entity.Lesson;
 import com.profy256.profy.modules.lessons.entity.LessonVideo;
+import com.profy256.profy.modules.lessons.repository.AutoCurationSettingsRepository;
 import com.profy256.profy.modules.lessons.repository.LessonRepository;
 import com.profy256.profy.modules.lessons.repository.LessonVideoRepository;
 import com.profy256.profy.modules.taxonomy.entity.TaxonomyNode;
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -34,23 +38,60 @@ public class AutoCurationService {
 
     private static final Logger log = LoggerFactory.getLogger(AutoCurationService.class);
 
+    /** Fixed single-row id for the admin toggle (mirrors ai_admin_settings convention). */
+    private static final UUID SETTINGS_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
+
     private final LessonRepository lessonRepository;
     private final LessonVideoRepository lessonVideoRepository;
     private final TaxonomyNodeRepository taxonomyNodeRepository;
     private final YouTubeSearchService youTubeSearchService;
+    private final AutoCurationSettingsRepository settingsRepository;
 
     public AutoCurationService(LessonRepository lessonRepository,
                                LessonVideoRepository lessonVideoRepository,
                                TaxonomyNodeRepository taxonomyNodeRepository,
-                               YouTubeSearchService youTubeSearchService) {
+                               YouTubeSearchService youTubeSearchService,
+                               AutoCurationSettingsRepository settingsRepository) {
         this.lessonRepository = lessonRepository;
         this.lessonVideoRepository = lessonVideoRepository;
         this.taxonomyNodeRepository = taxonomyNodeRepository;
         this.youTubeSearchService = youTubeSearchService;
+        this.settingsRepository = settingsRepository;
     }
 
+    /** True when the feature is on in admin settings AND a YouTube API key is configured. */
     public boolean isEnabled() {
+        return isConfigured() && isSettingEnabled();
+    }
+
+    /** True when {@code YOUTUBE_API_KEY} is present. */
+    public boolean isConfigured() {
         return youTubeSearchService.isConfigured();
+    }
+
+    /** True when the admin toggle is on (defaults to on if the settings row is missing). */
+    public boolean isSettingEnabled() {
+        return settingsRepository.findById(SETTINGS_ID)
+                .map(AutoCurationSettings::isEnabled)
+                .orElse(true);
+    }
+
+    @Transactional
+    public void setSettingEnabled(boolean enabled) {
+        AutoCurationSettings settings = settingsRepository.findById(SETTINGS_ID)
+                .orElseGet(() -> {
+                    AutoCurationSettings created = new AutoCurationSettings();
+                    created.setId(SETTINGS_ID);
+                    created.setEnabled(true);
+                    return created;
+                });
+        settings.setEnabled(enabled);
+        settingsRepository.save(settings);
+        log.info("Auto-curation {}", enabled ? "enabled" : "disabled");
+    }
+
+    public Map<String, Object> getSettingsMap() {
+        return Map.of("enabled", isSettingEnabled(), "keyConfigured", isConfigured());
     }
 
     /**

@@ -12,7 +12,6 @@ import com.profy256.profy.modules.lessons.repository.LessonRepository;
 import com.profy256.profy.modules.taxonomy.dto.TaxonomyRequests.TaxonomyCreateRequest;
 import com.profy256.profy.modules.taxonomy.entity.TaxonomyNode;
 import com.profy256.profy.modules.taxonomy.repository.TaxonomyNodeRepository;
-import com.profy256.profy.platform.config.AppConfig;
 import com.profy256.profy.platform.error.AiUnavailableException;
 import com.profy256.profy.platform.error.BadRequestException;
 import com.profy256.profy.platform.error.ResourceNotFoundException;
@@ -33,29 +32,17 @@ public class AdminAiService {
     private static final Pattern SLUG_PATTERN = Pattern.compile("[^a-z0-9]+");
     private static final int MAX_HISTORY = 20;
 
-    private final AiProviderService providerService;
-    private final OpenAiCompatibleProvider openAiProvider;
-    private final AnthropicProvider anthropicProvider;
-    private final GeminiProvider geminiProvider;
-    private final AppConfig appConfig;
+    private final LlmGateway llmGateway;
     private final TaxonomyNodeRepository taxonomyNodeRepository;
     private final LessonRepository lessonRepository;
 
     // In-memory conversation history per admin session (keyed by adminUserId)
     private final Map<UUID, List<ChatMessage>> conversationHistory = new HashMap<>();
 
-    public AdminAiService(AiProviderService providerService,
-                          OpenAiCompatibleProvider openAiProvider,
-                          AnthropicProvider anthropicProvider,
-                          GeminiProvider geminiProvider,
-                          AppConfig appConfig,
+    public AdminAiService(LlmGateway llmGateway,
                           TaxonomyNodeRepository taxonomyNodeRepository,
                           LessonRepository lessonRepository) {
-        this.providerService = providerService;
-        this.openAiProvider = openAiProvider;
-        this.anthropicProvider = anthropicProvider;
-        this.geminiProvider = geminiProvider;
-        this.appConfig = appConfig;
+        this.llmGateway = llmGateway;
         this.taxonomyNodeRepository = taxonomyNodeRepository;
         this.lessonRepository = lessonRepository;
     }
@@ -98,27 +85,10 @@ public class AdminAiService {
     @Transactional(readOnly = true)
     public TestProviderResponse testProvider(TestProviderRequest request) {
         try {
-            AiProviderService.ActiveProviderInfo active = providerService.getActiveProvider().orElse(null);
-            String apiKey, baseUrl, model;
-
-            if (active != null) {
-                apiKey = active.apiKey();
-                baseUrl = active.baseUrl();
-                model = active.defaultModel();
-            } else {
-                apiKey = appConfig.getAiApiKey();
-                baseUrl = appConfig.getAiBaseUrl();
-                model = appConfig.getAiModel();
-            }
-
-            if (apiKey == null || apiKey.isBlank()) {
-                return new TestProviderResponse(false, null, "No API key configured");
-            }
-
             List<ChatMessage> msgs = List.of(new ChatMessage("user", request.message()));
             String systemPrompt = "You are a helpful assistant. Reply concisely in 1-2 sentences.";
 
-            String responseText = callLlmWithExplicit(msgs, systemPrompt, apiKey, baseUrl, model);
+            String responseText = callLlm(msgs, systemPrompt);
             return new TestProviderResponse(true, responseText, null);
 
         } catch (Exception e) {
@@ -127,31 +97,8 @@ public class AdminAiService {
     }
 
     private String callLlm(List<ChatMessage> history, String systemPrompt) {
-        AiProviderService.ActiveProviderInfo active = providerService.getActiveProvider().orElse(null);
-        return callLlmWithExplicit(history, systemPrompt,
-                active != null ? active.apiKey() : appConfig.getAiApiKey(),
-                active != null ? active.baseUrl() : appConfig.getAiBaseUrl(),
-                active != null ? active.defaultModel() : appConfig.getAiModel());
-    }
-
-    private String callLlmWithExplicit(List<ChatMessage> history, String systemPrompt,
-                                         String apiKey, String baseUrl, String model) {
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new AiUnavailableException("No AI API key configured. Add a provider in AI Settings or set AI_API_KEY in .env");
-        }
-
-        // Detect provider type from base URL
-        String lowerUrl = baseUrl.toLowerCase();
-        if (lowerUrl.contains("anthropic")) {
-            ChatResponse resp = anthropicProvider.complete(history, systemPrompt, apiKey, baseUrl, model);
-            return resp.content();
-        } else if (lowerUrl.contains("google") || lowerUrl.contains("gemini")) {
-            ChatResponse resp = geminiProvider.complete(history, systemPrompt, apiKey, baseUrl, model);
-            return resp.content();
-        } else {
-            ChatResponse resp = openAiProvider.complete(history, systemPrompt, apiKey, baseUrl, model);
-            return resp.content();
-        }
+        ChatResponse resp = llmGateway.complete(history, systemPrompt);
+        return resp.content();
     }
 
     private String buildSystemPrompt() {
