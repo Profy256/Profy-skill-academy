@@ -16,6 +16,9 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, UUID> 
 
     long countByUserId(UUID userId);
 
-    @Query("SELECT COALESCE(AVG(CAST(qa.score AS double) / CAST(qa.total AS double) * 100), 0.0) FROM QuizAttempt qa WHERE qa.userId = :userId")
+    long countByUserIdAndLessonId(UUID userId, UUID lessonId);
+
+    /** Average score per attempt as a fraction 0..1; NULL when the user has no attempts. */
+    @Query("SELECT AVG(CAST(qa.score AS double) / CAST(NULLIF(qa.total, 0) AS double)) FROM QuizAttempt qa WHERE qa.userId = :userId")
     Double averageScoreByUserId(@Param("userId") UUID userId);
 }

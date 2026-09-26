@@ -22,6 +22,16 @@ public interface LessonProgressRepository extends JpaRepository<LessonProgress, 
     @Query("SELECT COUNT(DISTINCT lp.lessonId) FROM LessonProgress lp WHERE lp.userId = :userId AND lp.status = 'completed'")
     long countDistinctCompletedLessons(@Param("userId") UUID userId);
 
+    @Query("SELECT COUNT(l) FROM Lesson l WHERE l.status = 'published' AND l.nodeId = :courseNodeId")
+    long countPublishedLessons(@Param("courseNodeId") UUID courseNodeId);
+
+    @Query("SELECT COUNT(DISTINCT lp.lessonId) FROM LessonProgress lp " +
+           "JOIN com.profy256.profy.modules.lessons.entity.Lesson l ON lp.lessonId = l.id " +
+           "WHERE lp.userId = :userId AND lp.status = 'completed' AND l.nodeId = :courseNodeId")
+    long countCompletedLessonsInCourse(
+            @Param("userId") UUID userId,
+            @Param("courseNodeId") UUID courseNodeId);
+
     @Query("SELECT lp FROM LessonProgress lp " +
            "JOIN com.profy256.profy.modules.lessons.entity.Lesson l ON lp.lessonId = l.id " +
            "JOIN com.profy256.profy.modules.taxonomy.entity.TaxonomyNode t ON l.nodeId = t.id " +

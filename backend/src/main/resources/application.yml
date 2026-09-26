@@ -52,9 +52,11 @@ profy:
   #   Groq:        AI_BASE_URL=https://api.groq.com/openai/v1
   #   Together:    AI_BASE_URL=https://api.together.xyz/v1
   #   Any custom:  AI_BASE_URL=https://your-provider.com/v1
+  # OpenRouter models: openrouter/free = auto-routes free models ($0);
+  # openrouter/auto = paid Auto Router (needs credits, else 402).
   ai-base-url: ${AI_BASE_URL:https://openrouter.ai/api/v1}
   ai-api-key: ${AI_API_KEY:}
-  ai-model: ${AI_MODEL:openai/gpt-4o-mini}
+  ai-model: ${AI_MODEL:openrouter/free}
   ai-free-msgs-per-day: ${AI_FREE_MSGS_PER_DAY:20}
   ai-premium-msgs-per-day: ${AI_PREMIUM_MSGS_PER_DAY:200}
 

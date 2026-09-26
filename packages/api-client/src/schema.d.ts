@@ -1373,6 +1373,7 @@ export interface components {
             lessons_in_progress?: number;
             bookmarks_count?: number;
             quizzes_taken?: number;
+            /** @description Average score across attempts as a fraction 0-1 (e.g. 0.83 = 83%); null when the learner has not taken any quiz. */
             avg_quiz_score?: number | null;
         };
         Entitlement: {

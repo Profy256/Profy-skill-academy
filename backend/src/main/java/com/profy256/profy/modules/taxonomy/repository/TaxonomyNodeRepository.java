@@ -20,4 +20,6 @@ public interface TaxonomyNodeRepository extends JpaRepository<TaxonomyNode, UUID
     List<TaxonomyNode> findByIsActiveTrueAndPhase(Integer phase);
 
     List<TaxonomyNode> findByIdIn(List<UUID> ids);
+
+    List<TaxonomyNode> findByNodeTypeAndIsActiveTrue(String nodeType);
 }

@@ -49,7 +49,9 @@ public class OpenAiCompatibleProvider implements LLMProvider {
             body.put("model", model);
             body.put("messages", apiMessages);
             body.put("temperature", 0.7);
-            body.put("max_tokens", 2048);
+            // Free-tier routing often lands on reasoning models that spend the
+            // budget on thinking before any visible text — leave headroom.
+            body.put("max_tokens", 4096);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
@@ -61,9 +63,14 @@ public class OpenAiCompatibleProvider implements LLMProvider {
                 if (choices != null && !choices.isEmpty()) {
                     Map<String, Object> choice = choices.get(0);
                     Map<String, Object> message = (Map<String, Object>) choice.get("message");
-                    if (message != null && message.get("content") != null) {
-                        return new ChatResponse(message.get("content").toString());
+                    if (message != null) {
+                        Object content = message.get("content");
+                        if (content != null && !content.toString().isBlank()) {
+                            return new ChatResponse(content.toString());
+                        }
                     }
+                    throw new AiUnavailableException("AI provider returned an empty reply",
+                            AiUnavailableException.Reason.OTHER);
                 }
                 throw new AiUnavailableException("Unexpected AI response format");
             } else {

@@ -44,7 +44,7 @@ services:
       # AI — any OpenAI-compatible provider (OpenRouter, OpenAI, Gemini, Groq, Together, etc.)
       AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
       AI_API_KEY: ${AI_API_KEY:-}
-      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+      AI_MODEL: ${AI_MODEL:-openrouter/free}
       AI_FREE_MSGS_PER_DAY: ${AI_FREE_MSGS_PER_DAY:-20}
       AI_PREMIUM_MSGS_PER_DAY: ${AI_PREMIUM_MSGS_PER_DAY:-200}
       # Stripe (international)
@@ -79,7 +79,7 @@ services:
       # AI
       AI_BASE_URL: ${AI_BASE_URL:-https://openrouter.ai/api/v1}
       AI_API_KEY: ${AI_API_KEY:-}
-      AI_MODEL: ${AI_MODEL:-openai/gpt-4o-mini}
+      AI_MODEL: ${AI_MODEL:-openrouter/free}
       # Stripe
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       # Auto video curation (YouTube Data API v3)

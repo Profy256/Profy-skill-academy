@@ -131,6 +131,34 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > `bookmarks_count`, …) while the implementation returns camelCase → mobile continue/bookmarks/stats
 > screens will throw or zero-fill; the same snake_case-vs-camelCase drift remains in
 > `backend/api/openapi.yaml` response bodies.
+> **Session note (2026-09-26, night):** Bug sweep on the progress/library/quiz/stats/AI area + AI model switch.
+> **AI model:** `openrouter/auto` tested against the real key → **402** ("requires more credits… afford 503
+> tokens") because Auto Router only picks *paid* models and the account has ~0 credits. OpenRouter's **free**
+> auto-router is a separate model, **`openrouter/free`** (pricing 0/0, routes to the ~21 `:free` models;
+> verified: routed to `inclusionai/ling-3.0-flash-fin:free`). `AI_MODEL` is now `openrouter/free` in `.env`,
+> `.env.example`, `application.yml`, `application-local.yml` and `docker-compose.yml` (api + worker) — the
+> code default was `openai/gpt-4o-mini`, which is neither OpenRouter nor free. Live `POST /lessons/{id}/ai/chat`
+> → **200 with a real grounded reply** (dev API now started *with* the `AI_*` env vars — without them it
+> 503s on purpose).
+> **Backend fixes:** quiz attempts enforce the spec (`score ≥ 0`, `total ≥ 1`) plus `score ≤ total` — the DTO
+> only had `@NotNull`, so garbage scores could poison `avgQuizScore`; bookmark double-save race now returns
+> 201 instead of 500 (`saveAndFlush` raises the PK conflict inside the tx, the controller retries in a fresh
+> tx); `GET /lessons/{id}/ai/messages` returns **200 `{"messages":[]}`** when no session exists (the spec
+> declares only 200 — the old 404 made "fresh session" look like an error); anonymous/forbidden requests now
+> return **401/403 with the standard `{"error":{code,message}}` envelope** (was an *empty* 403 — the spec,
+> web `isAuthError` and mobile `isUnauthorized`, which checks 401 only, all expect 401);
+> `GlobalExceptionHandler` maps type-mismatch (400), malformed JSON (400), missing params / constraint
+> violations (400), wrong method (405) and wrong content type (415) — all previously fell through to 500;
+> `avg_quiz_score` now returns a **0–1 fraction** (web *and* mobile already `×100` — it used to return
+> percent, so the profile screen would have shown e.g. "6800%") and `null` when no quiz was taken (spec
+> allows null); N+1 sweep in `ProgressService` (continue + bookmarks batch-load lessons/courses, completion
+> and percent use COUNT queries, stats use `countByUserId*`, active courses via a derived query); LLM provider
+> sends `max_tokens` 4096 (free-tier reasoning models eat the budget on thinking) and an empty `content`
+> reply surfaces as `ai_unavailable` instead of an empty chat bubble.
+> Verification: backend **130/130** (+17 tests: `AiServiceTest`, `GlobalExceptionHandlerTest`, quiz/race/stats
+> cases), web `tsc` + lint + `build` green, `redocly lint` valid, api-client regenerated, live smoke green
+> (401/400/405/415 bodies, quiz validation, idempotent bookmarks incl. `lessonSlug`, fraction stats, real AI
+> chat). Repo renamed: `origin` → `https://github.com/Profy256/Deraskul.git`.
 ---
 
 ## Milestone 0 — Project Scaffolding & Contracts

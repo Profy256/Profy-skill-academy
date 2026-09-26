@@ -1,9 +1,12 @@
 package com.profy256.profy.modules.progress.controller;
 
 import com.profy256.profy.modules.progress.dto.ProgressRequests.ProgressRequest;
+import com.profy256.profy.modules.progress.entity.Bookmark;
 import com.profy256.profy.modules.progress.entity.LessonProgress;
 import com.profy256.profy.modules.progress.service.ProgressService;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 
@@ -15,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ProgressControllerTest {
@@ -60,5 +65,22 @@ class ProgressControllerTest {
                 lessonId, new ProgressRequest("completed"), authFor(userId));
 
         assertThat(response.getBody()).containsEntry("completedAt", completedAt.toString());
+    }
+
+    @Test
+    void addBookmarkRetriesAfterLosingInsertRace() {
+        UUID userId = UUID.randomUUID();
+        UUID lessonId = UUID.randomUUID();
+        Bookmark winner = new Bookmark(userId, lessonId);
+        winner.setCreatedAt(Instant.parse("2026-09-26T10:00:00Z"));
+        when(progressService.addBookmark(userId, lessonId))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"))
+                .thenReturn(winner);
+
+        ResponseEntity<Map<String, Object>> response = controller.addBookmark(lessonId, authFor(userId));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(response.getBody()).containsEntry("lessonId", lessonId);
+        verify(progressService, times(2)).addBookmark(userId, lessonId);
     }
 }

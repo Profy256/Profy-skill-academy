@@ -7,6 +7,7 @@ import com.profy256.profy.modules.progress.entity.Bookmark;
 import com.profy256.profy.modules.progress.entity.LessonProgress;
 import com.profy256.profy.modules.progress.service.ProgressService;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -61,7 +62,13 @@ public class ProgressController {
             @PathVariable UUID lessonId,
             Authentication authentication) {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
-        Bookmark bookmark = progressService.addBookmark(userId, lessonId);
+        Bookmark bookmark;
+        try {
+            bookmark = progressService.addBookmark(userId, lessonId);
+        } catch (DataIntegrityViolationException race) {
+            // Lost a concurrent double-save: the bookmark row now exists, read it in a fresh transaction.
+            bookmark = progressService.addBookmark(userId, lessonId);
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "lessonId", bookmark.getLessonId(),
                 "createdAt", bookmark.getCreatedAt().toString()

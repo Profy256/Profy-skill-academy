@@ -29,6 +29,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -116,11 +117,13 @@ public class AiService {
 
     @Transactional(readOnly = true)
     public ChatHistoryResponse getHistory(UUID userId, UUID lessonId) {
-        AiChatSession session = sessionRepository.findByUserIdAndLessonId(userId, lessonId)
-                .orElseThrow(() -> new ResourceNotFoundException("Chat session not found"));
+        Optional<AiChatSession> maybeSession = sessionRepository.findByUserIdAndLessonId(userId, lessonId);
+        if (maybeSession.isEmpty()) {
+            return new ChatHistoryResponse(List.of());
+        }
 
         List<AiChatMessage> messages = messageRepository
-                .findBySessionIdOrderByCreatedAtAsc(session.getId());
+                .findBySessionIdOrderByCreatedAtAsc(maybeSession.get().getId());
 
         List<ChatMessageResponse> responses = messages.stream()
                 .map(m -> new ChatMessageResponse(m.getId(), m.getRole(), m.getContent(), m.getCreatedAt()))

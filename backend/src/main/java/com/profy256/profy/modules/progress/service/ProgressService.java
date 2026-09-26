@@ -21,8 +21,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class ProgressService {
@@ -83,15 +85,10 @@ public class ProgressService {
 
     /** Percentage of published lessons of a course the user has completed. */
     private int progressPercent(UUID userId, UUID courseNodeId) {
-        List<Lesson> lessons = lessonRepository.findByStatusAndNodeId("published", courseNodeId);
-        if (lessons.isEmpty()) return 0;
-        int completed = 0;
-        for (Lesson l : lessons) {
-            LessonProgress p = lessonProgressRepository.findByUserIdAndLessonId(userId, l.getId())
-                    .orElse(null);
-            if (p != null && "completed".equals(p.getStatus())) completed++;
-        }
-        return (int) Math.round(completed * 100.0 / lessons.size());
+        long total = lessonProgressRepository.countPublishedLessons(courseNodeId);
+        if (total == 0) return 0;
+        long completed = lessonProgressRepository.countCompletedLessonsInCourse(userId, courseNodeId);
+        return (int) Math.round(completed * 100.0 / total);
     }
 
     @Transactional(readOnly = true)
@@ -99,14 +96,18 @@ public class ProgressService {
         List<LessonProgress> inProgressItems =
                 lessonProgressRepository.findProgressByStatusWithLessonInfo(userId, "in_progress");
 
+        Map<UUID, Lesson> lessonsById = loadLessons(inProgressItems.stream()
+                .map(LessonProgress::getLessonId)
+                .toList());
+        Map<UUID, TaxonomyNode> coursesById = loadCourses(lessonsById.values());
+
         List<ContinueLearningItem> items = new ArrayList<>();
         for (LessonProgress lp : inProgressItems) {
-            Lesson lesson = lessonRepository.findById(lp.getLessonId()).orElse(null);
+            Lesson lesson = lessonsById.get(lp.getLessonId());
             if (lesson == null) continue;
 
-            TaxonomyNode courseNode = taxonomyNodeRepository.findById(lesson.getNodeId()).orElse(null);
-            String courseSlug = courseNode != null ? courseNode.getSlug() : "";
-            String courseName = courseNode != null ? courseNode.getName() : "";
+            TaxonomyNode courseNode = coursesById.get(lesson.getNodeId());
+            if (courseNode == null) continue;
 
             LessonSummary summary = new LessonSummary(
                     lesson.getId(),
@@ -116,10 +117,29 @@ public class ProgressService {
                     lesson.getSortOrder()
             );
 
-            items.add(new ContinueLearningItem(summary, courseSlug, courseName, lp.getStatus(), lp.getUpdatedAt()));
+            items.add(new ContinueLearningItem(summary, courseNode.getSlug(), courseNode.getName(),
+                    lp.getStatus(), lp.getUpdatedAt()));
         }
 
         return new ContinueLearningResponse(items);
+    }
+
+    private Map<UUID, Lesson> loadLessons(List<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) return Map.of();
+        return lessonRepository.findAllById(lessonIds).stream()
+                .collect(Collectors.toMap(Lesson::getId, l -> l));
+    }
+
+    private Map<UUID, TaxonomyNode> loadCourses(Iterable<Lesson> lessons) {
+        List<UUID> courseIds = new ArrayList<>();
+        for (Lesson lesson : lessons) {
+            if (lesson.getNodeId() != null && !courseIds.contains(lesson.getNodeId())) {
+                courseIds.add(lesson.getNodeId());
+            }
+        }
+        if (courseIds.isEmpty()) return Map.of();
+        return taxonomyNodeRepository.findAllById(courseIds).stream()
+                .collect(Collectors.toMap(TaxonomyNode::getId, t -> t));
     }
 
     @Transactional
@@ -132,7 +152,7 @@ public class ProgressService {
                 .orElseThrow(() -> new ResourceNotFoundException("lesson not found"));
 
         Bookmark bookmark = new Bookmark(userId, lessonId);
-        return bookmarkRepository.save(bookmark);
+        return bookmarkRepository.saveAndFlush(bookmark);
     }
 
     @Transactional
@@ -145,12 +165,17 @@ public class ProgressService {
     public BookmarkListResponse getBookmarks(UUID userId) {
         List<Bookmark> bookmarks = bookmarkRepository.findByUserIdOrderByCreatedAtDesc(userId);
 
+        Map<UUID, Lesson> lessonsById = loadLessons(bookmarks.stream()
+                .map(Bookmark::getLessonId)
+                .toList());
+        Map<UUID, TaxonomyNode> coursesById = loadCourses(lessonsById.values());
+
         List<BookmarkResponse> responses = new ArrayList<>();
         for (Bookmark b : bookmarks) {
-            Lesson lesson = lessonRepository.findById(b.getLessonId()).orElse(null);
+            Lesson lesson = lessonsById.get(b.getLessonId());
             if (lesson == null) continue;
 
-            TaxonomyNode courseNode = taxonomyNodeRepository.findById(lesson.getNodeId()).orElse(null);
+            TaxonomyNode courseNode = coursesById.get(lesson.getNodeId());
             String courseSlug = courseNode != null ? courseNode.getSlug() : "";
             String courseName = courseNode != null ? courseNode.getName() : "";
 
@@ -169,13 +194,22 @@ public class ProgressService {
 
     @Transactional
     public QuizAttemptResponse recordQuizAttempt(UUID userId, UUID lessonId, Integer score, Integer total) {
+        if (score == null || score < 0) {
+            throw new BadRequestException("score must be 0 or more");
+        }
+        if (total == null || total < 1) {
+            throw new BadRequestException("total must be at least 1");
+        }
+        if (score > total) {
+            throw new BadRequestException("score cannot exceed total");
+        }
+
         lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("lesson not found"));
 
         boolean passed = score * 2 >= total;
 
-        long previousAttempts = quizAttemptRepository
-                .findByUserIdAndLessonIdOrderByCreatedAtDesc(userId, lessonId).size();
+        long previousAttempts = quizAttemptRepository.countByUserIdAndLessonId(userId, lessonId);
 
         QuizAttempt attempt = new QuizAttempt(userId, lessonId, score, total, passed, (int) previousAttempts + 1);
         QuizAttempt saved = quizAttemptRepository.save(attempt);
@@ -193,10 +227,9 @@ public class ProgressService {
     public ProfileStatsResponse getProfileStats(UUID userId) {
         long lessonsCompleted = lessonProgressRepository.countByUserIdAndStatus(userId, "completed");
         long lessonsInProgress = lessonProgressRepository.countByUserIdAndStatus(userId, "in_progress");
-        long bookmarksCount = bookmarkRepository.findByUserIdOrderByCreatedAtDesc(userId).size();
+        long bookmarksCount = bookmarkRepository.countByUserId(userId);
         long quizzesTaken = quizAttemptRepository.countByUserId(userId);
         Double avgQuizScore = quizAttemptRepository.averageScoreByUserId(userId);
-        if (avgQuizScore == null) avgQuizScore = 0.0;
 
         int coursesCompleted = countCoursesCompleted(userId);
 
@@ -206,15 +239,12 @@ public class ProgressService {
                 (int) lessonsInProgress,
                 (int) bookmarksCount,
                 (int) quizzesTaken,
-                Math.round(avgQuizScore * 10.0) / 10.0
+                avgQuizScore == null ? null : Math.round(avgQuizScore * 100.0) / 100.0
         );
     }
 
     private int countCoursesCompleted(UUID userId) {
-        List<TaxonomyNode> courseNodes = taxonomyNodeRepository.findAll().stream()
-                .filter(n -> "course".equals(n.getNodeType()))
-                .filter(TaxonomyNode::getIsActive)
-                .toList();
+        List<TaxonomyNode> courseNodes = taxonomyNodeRepository.findByNodeTypeAndIsActiveTrue("course");
 
         int count = 0;
         for (TaxonomyNode course : courseNodes) {
@@ -227,15 +257,8 @@ public class ProgressService {
 
     @Transactional(readOnly = true)
     public boolean isCourseComplete(UUID userId, UUID courseNodeId) {
-        List<Lesson> publishedLessons = lessonRepository.findByStatusAndNodeId("published", courseNodeId);
-        if (publishedLessons.isEmpty()) return false;
-
-        for (Lesson lesson : publishedLessons) {
-            LessonProgress progress = lessonProgressRepository.findByUserIdAndLessonId(userId, lesson.getId()).orElse(null);
-            if (progress == null || !"completed".equals(progress.getStatus())) {
-                return false;
-            }
-        }
-        return true;
+        long publishedLessons = lessonProgressRepository.countPublishedLessons(courseNodeId);
+        if (publishedLessons == 0) return false;
+        return lessonProgressRepository.countCompletedLessonsInCourse(userId, courseNodeId) == publishedLessons;
     }
 }

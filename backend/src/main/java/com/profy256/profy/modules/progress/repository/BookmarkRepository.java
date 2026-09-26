@@ -14,4 +14,6 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Bookmark.Boo
     Optional<Bookmark> findByUserIdAndLessonId(UUID userId, UUID lessonId);
 
     List<Bookmark> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    long countByUserId(UUID userId);
 }
