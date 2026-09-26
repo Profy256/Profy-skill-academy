@@ -1,5 +1,7 @@
 package com.profy256.profy.modules.taxonomy.entity;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -46,6 +48,18 @@ public class TaxonomyNode {
 
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
+
+    /**
+     * Course-level final certification test, stored as JSON:
+     * [{"question":"...","options":["a","b","c","d"],"answerIndex":0}, ...]
+     * Only populated for nodeType = 'course'. NULL means "no test published".
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "final_test", columnDefinition = "jsonb")
+    private String finalTest;
+
+    @Column(name = "final_test_pass_percent", nullable = false)
+    private Integer finalTestPassPercent = 70;
 
     @Transient
     private List<TaxonomyNode> children = new ArrayList<>();
@@ -102,4 +116,10 @@ public class TaxonomyNode {
 
     public List<TaxonomyNode> getChildren() { return children; }
     public void setChildren(List<TaxonomyNode> children) { this.children = children; }
+
+    public String getFinalTest() { return finalTest; }
+    public void setFinalTest(String finalTest) { this.finalTest = finalTest; }
+
+    public Integer getFinalTestPassPercent() { return finalTestPassPercent; }
+    public void setFinalTestPassPercent(Integer finalTestPassPercent) { this.finalTestPassPercent = finalTestPassPercent; }
 }

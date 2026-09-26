@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
+import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import { register as apiRegister, login as apiLogin, logout as apiLogout, getTokens, saveTokens } from "@/lib/auth";
 
@@ -39,7 +40,9 @@ import {
   type SubcategoryItem,
 } from "@/lib/data";
 import type { ApiLesson } from "@/lib/api";
-import { fetchResources } from "@/lib/api";
+import { fetchResources, fetchMyCertificates } from "@/lib/api";
+import CertificateTab, { CertificateList } from "@/components/CertificateTab";
+import type { CertificateInfo } from "@/lib/api";
 
 const FG = "var(--foreground)";
 const FG_MUTED = "var(--muted-foreground)";
@@ -155,6 +158,30 @@ function Sidebar({
             </button>
           );
         })}
+        {/* Real route (not an SPA screen) — also the internal link search
+            engines follow into the crawlable article pages. */}
+        <Link
+          href="/blog"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            width: "100%",
+            padding: collapsed ? "10px 0" : "10px 20px",
+            justifyContent: collapsed ? "center" : "flex-start",
+            background: "none",
+            border: "none",
+            borderRight: "3px solid transparent",
+            cursor: "pointer",
+            color: FG_MUTED,
+            fontWeight: 500,
+            fontSize: 14,
+            textDecoration: "none",
+          }}
+        >
+          <BlogIcon active={false} />
+          {!collapsed && <span>Blog</span>}
+        </Link>
       </nav>
 
       {/* Collapse toggle */}
@@ -182,6 +209,15 @@ function Sidebar({
         </button>
       </div>
     </aside>
+  );
+}
+
+function BlogIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={active ? PRIMARY : FG_MUTED} strokeWidth="1.8">
+      <path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z" />
+      <path d="M8 7h8M8 11h8M8 15h5" />
+    </svg>
   );
 }
 
@@ -565,8 +601,9 @@ function SubcategoryScreen({ category, subcategory, onBack, onCourse }: { catego
 }
 
 function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack: () => void; onLesson: (l: LessonItem) => void }) {
+  const [tab, setTab] = useState<"lessons" | "certificate">("lessons");
   const completed = course.lessons.filter((l) => l.completed).length;
-  const pct = Math.round((completed / course.lessons.length) * 100);
+  const pct = course.lessons.length > 0 ? Math.round((completed / course.lessons.length) * 100) : 0;
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       <div className="px-6 pt-4 pb-4 flex-shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -583,7 +620,33 @@ function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack
             <div style={{ background: BORDER, borderRadius: 4, height: 5 }}><div style={{ width: `${pct}%`, height: "100%", background: PRIMARY, borderRadius: 4 }} /></div>
           </div>
         )}
+        <div className="flex gap-0 mt-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          {([["lessons", "Lessons"], ["certificate", "Certificate"]] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              style={{
+                padding: "9px 16px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                borderBottom: tab === id ? `2px solid ${PRIMARY}` : "2px solid transparent",
+                fontSize: 14,
+                fontWeight: tab === id ? 700 : 500,
+                color: tab === id ? PRIMARY : FG_MUTED,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+      {tab === "certificate" && (
+        <div className="flex-1 overflow-y-auto px-6" style={{ maxWidth: 720, paddingTop: 16 }}>
+          <CertificateTab courseSlug={course.id} />
+        </div>
+      )}
+      {tab === "lessons" && (
       <div className="flex-1 overflow-y-auto px-6" style={{ maxWidth: 720 }}>
         <div style={{ padding: "16px 0 4px", fontSize: 11, fontWeight: 700, color: FG_MUTED, letterSpacing: 1.2, textTransform: "uppercase" }}>{course.lessons.length} Lessons</div>
         {course.lessons.map((lesson, idx) => (
@@ -616,6 +679,7 @@ function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -624,6 +688,23 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
   const [activeTab, setActiveTab] = useState<"steps" | "tools" | "examples" | "notes" | "quiz">("steps");
   const [completed, setCompleted] = useState(lesson.completed);
   const [apiLesson, setApiLesson] = useState<ApiLesson | null>(null);
+  // Keyed by lesson id so switching lessons starts a fresh quiz without an
+  // effect (and without re-answering when you come back to a graded one).
+  const [quizAnswersByLesson, setQuizAnswersByLesson] = useState<Record<string, Record<number, number>>>({});
+  const [gradedLessons, setGradedLessons] = useState<Record<string, boolean>>({});
+  const quizAnswers = quizAnswersByLesson[lesson.id] ?? {};
+  const quizChecked = Boolean(gradedLessons[lesson.id]);
+  const setQuizAnswers = (update: Record<number, number> | ((prev: Record<number, number>) => Record<number, number>)) =>
+    setQuizAnswersByLesson((prev) => {
+      const current = prev[lesson.id] ?? {};
+      const next = typeof update === "function" ? update(current) : update;
+      return { ...prev, [lesson.id]: next };
+    });
+  const setQuizChecked = (value: boolean | ((prev: boolean) => boolean)) =>
+    setGradedLessons((prev) => {
+      const current = Boolean(prev[lesson.id]);
+      return { ...prev, [lesson.id]: typeof value === "function" ? value(current) : value };
+    });
   const tabs = [{ id: "steps", label: "Steps" }, { id: "tools", label: "Tools" }, { id: "examples", label: "Examples" }, { id: "notes", label: "Notes" }, { id: "quiz", label: "Quiz" }] as const;
 
   useEffect(() => {
@@ -758,16 +839,85 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
             )}
             {activeTab === "quiz" && (
               <div className="flex flex-col gap-3">
-                {quizzes.length > 0 ? quizzes.map((quiz, qi) => (
-                  <div key={qi} className="mb-4">
-                    <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.5, marginBottom: 12 }}>{quiz.question}</p>
-                    {quiz.options.map((opt, i) => (
-                      <button key={i} style={{ padding: "14px 18px", borderRadius: 10, background: i === quiz.correctIndex ? "rgb(122 158 126 / 0.12)" : CARD, border: i === quiz.correctIndex ? `1.5px solid ${SUCCESS}` : `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left", fontSize: 15, fontWeight: 500, color: FG, marginBottom: 8, width: "100%" }}>
-                        {opt}
+                {quizzes.length > 0 ? (
+                  <>
+                    {quizzes.map((quiz, qi) => {
+                      const chosen = quizAnswers[qi];
+                      return (
+                        <div key={qi} className="mb-4">
+                          <p style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: FG, lineHeight: 1.5, marginBottom: 12 }}>{qi + 1}. {quiz.question}</p>
+                          {quiz.options.map((opt, i) => {
+                            const picked = chosen === i;
+                            const isCorrect = i === quiz.correctIndex;
+                            const revealCorrect = quizChecked && isCorrect;
+                            const revealWrong = quizChecked && picked && !isCorrect;
+                            return (
+                              <button
+                                key={i}
+                                disabled={quizChecked}
+                                onClick={() => setQuizAnswers((prev) => ({ ...prev, [qi]: i }))}
+                                style={{
+                                  padding: "14px 18px",
+                                  borderRadius: 10,
+                                  background: revealCorrect ? "rgb(122 158 126 / 0.12)" : revealWrong ? "rgb(190 80 80 / 0.12)" : picked ? "rgb(59 91 170 / 0.10)" : CARD,
+                                  border: revealCorrect ? `1.5px solid ${SUCCESS}` : revealWrong ? `1.5px solid var(--danger, #be5050)` : picked ? `1.5px solid ${PRIMARY}` : `1px solid ${BORDER}`,
+                                  cursor: quizChecked ? "default" : "pointer",
+                                  textAlign: "left",
+                                  fontSize: 15,
+                                  fontWeight: picked || revealCorrect ? 600 : 500,
+                                  color: FG,
+                                  marginBottom: 8,
+                                  width: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 10,
+                                }}
+                              >
+                                <span>{opt}</span>
+                                {revealCorrect && <span style={{ fontSize: 12, fontWeight: 700, color: SUCCESS }}>Correct</span>}
+                                {revealWrong && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--danger, #be5050)" }}>Your answer</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                    {!quizChecked ? (
+                      <button
+                        disabled={quizzes.some((_, qi) => quizAnswers[qi] === undefined)}
+                        onClick={() => setQuizChecked(true)}
+                        style={{
+                          padding: "13px 0",
+                          borderRadius: 10,
+                          background: quizzes.some((_, qi) => quizAnswers[qi] === undefined) ? CARD : PRIMARY,
+                          color: quizzes.some((_, qi) => quizAnswers[qi] === undefined) ? FG_MUTED : ON_PRIMARY,
+                          border: "none",
+                          cursor: quizzes.some((_, qi) => quizAnswers[qi] === undefined) ? "default" : "pointer",
+                          fontSize: 15,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Check answers
                       </button>
-                    ))}
-                  </div>
-                )) : (
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: "14px 18px" }}>
+                        <span style={{ fontSize: 14, color: FG, fontWeight: 600 }}>
+                          {quizzes.filter((quiz, qi) => quizAnswers[qi] === quiz.correctIndex).length} of {quizzes.length} correct
+                        </span>
+                        <button
+                          onClick={() => {
+                            setQuizAnswers({});
+                            setQuizChecked(false);
+                          }}
+                          style={{ padding: "8px 16px", borderRadius: 8, background: "transparent", border: `1.5px solid ${BORDER}`, color: FG_MUTED, cursor: "pointer", fontSize: 13, fontWeight: 700 }}
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <p style={{ fontSize: 14, color: FG_MUTED }}>No quiz available for this lesson yet.</p>
                 )}
               </div>
@@ -915,6 +1065,15 @@ function LibraryScreen({ onLesson, onNav }: { onLesson: () => void; onNav: (s: "
 
 function ProfileScreen({ onSubscription, onNav }: { onSubscription: () => void; onNav: (s: "home" | "learn" | "library" | "profile") => void }) {
   const stats = [{ label: "Lessons Done", value: "14" }, { label: "Hours Learned", value: "6.2" }, { label: "Courses Started", value: "3" }];
+  // null = not resolved yet (signed-out visitors simply resolve to []).
+  const [certificates, setCertificates] = useState<CertificateInfo[] | null>(null);
+
+  useEffect(() => {
+    fetchMyCertificates()
+      .then((list) => setCertificates(list))
+      .catch(() => setCertificates([]));
+  }, []);
+
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       <div className="flex-1 overflow-y-auto px-6" style={{ maxWidth: 720 }}>
@@ -943,6 +1102,18 @@ function ProfileScreen({ onSubscription, onNav }: { onSubscription: () => void; 
               </div>
             ))}
           </div>
+        </div>
+        <div className="py-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: FG_MUTED, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 12 }}>Credentials</div>
+          {certificates && certificates.length > 0 ? (
+            <CertificateList certificates={certificates} />
+          ) : (
+            <p style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.6 }}>
+              {certificates === null
+                ? "Loading your credentials…"
+                : "No credentials yet. Pass a course final test to earn a verifiable certificate."}
+            </p>
+          )}
         </div>
         <div className="py-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
           <button onClick={onSubscription} style={{ width: "100%", padding: "16px 20px", background: PRIMARY, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, textAlign: "left" }}>

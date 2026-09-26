@@ -64,7 +64,43 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > - YouTube search costs 100 quota units/call on the free tier → only fetch when a lesson has zero videos;
 >   if `YOUTUBE_API_KEY` is unset, log once and disable the feature silently (lesson payloads unaffected)
 > - YouTube client should follow the `OpenAiCompatibleProvider` RestTemplate pattern (timeouts, no new deps)
-
+>
+> **Session note (2026-09-25, later):** Milestone 12 **complete** — learner journey smoke-tested live
+> (free attempt → 402 → credit → rollback on validation error → pass → certificate → public verify →
+> PDF/PNG), docs + `.env.example` updated, and the full verification sweep is green. Only pre-existing
+> `apps/admin` lint errors remain (baseline, untouched files).
+>
+> **Session note (2026-09-25):** NEW FEATURE SET — **Milestone 12 below** (certificates + Markdown
+> blog + SEO/GEO). Backend, OpenAPI, api-client, admin UI, and web UI are implemented; backend tests
+> 108/108 green, `redocly lint` valid, `apps/web` lint 0 errors + `tsc` + `next build` pass, `apps/admin`
+> `tsc` clean. Live smoke test on a fresh DB applied Flyway **V16–V20** cleanly and surfaced 2 bugs,
+> both fixed: (1) JPQL `LIKE` over the `jsonb` `tags` column failed at startup → native query with
+> `jsonb_array_elements_text`; (2) `/api/v1/courses/{slug}/final-test` was anonymously reachable via the
+> public `/api/v1/courses/**` matcher → NPE/500 → declared `authenticated()` + null-safe `userId()`.
+> Remaining: finish the authenticated learner journey smoke test, docs/.env sweep, final verification run.
+>
+> **Session note (2026-09-26):** Milestone 0 **closed** + stale docs swept. (1) **CI** added at
+> `.github/workflows/ci.yml` — 6 jobs gating `main` + PRs: `backend` (`./mvnw -B test`, 108/108) ·
+> `api-spec` (redocly lint + `packages/api-client` generate/typecheck) · `web` + `admin`
+> (`npm ci` → `lint` → `tsc --noEmit` → `build`) · `api-smoke` (Postgres 16 + Redis 7 services →
+> boot API → **seed twice** → assert categories/lessons/primaryVideo/blog/verify-404) · `mobile`
+> (`flutter analyze` + `flutter test`). Fixed the JWT gotcha while proving it: `JWT_SECRET` must be
+> ≥32 bytes or boot dies with jjwt `WeakKeyException`. (2) **Seed** = `scripts/seed.sh` +
+> `scripts/seed_content.sql`: idempotent + additive (never deletes) — 3 phase-1 categories (reused
+> via alias slugs), 6 phase-2, 13 PRD subcategories, 4 courses, 12 lessons with the full AI-Teacher
+> field set, 12 curated YouTube videos; verified running twice on a **fresh** DB (`profy_ci`) with
+> migrations V1–V20. (3) **Admin lint baseline cleared** — all 15 pre-existing
+> `react-hooks/set-state-in-effect` / `no-explicit-any` / `no-unescaped-entities` errors fixed for
+> real (promise-callback setState, lazy `useState` initializers, precise types; **no
+> `eslint-disable`**), so CI can enforce `npm run lint` on `apps/admin` (now 0 errors, 10 warnings).
+> (4) Mobile goldens made deterministic-ish: `apps/mobile/test/flutter_test_config.dart` adds a 2%
+> tolerant golden comparator → `flutter test` **15/15**. (5) Local verification of every CI job green.
+> (6) Docs sync for scope change: **PRD → v2.0** (certificates moved into Phase 1 §7.5, blog+SEO §7.8,
+> service-boundary question resolved, stack corrected Go→Java/Next.js, roadmap/open questions updated),
+> `docs/TECHNICAL_DOC.md` (Go/Vite/`cmd/worker` leftovers → Spring worker profile + Next.js, new §9.1 CI
+> + §9.2 seed), `deploy.md` (standalone Node servers, not Vite static bundles; missing env rows),
+> `README.md` (CI + Seed Data sections).
+>
 ---
 
 ## Milestone 0 — Project Scaffolding & Contracts
@@ -74,13 +110,20 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
       (Maven wrapper, `./mvnw compile` + `./mvnw spring-boot:run` for local dev; migrate-on-start via Flyway)
 - [x] Write `backend/api/openapi.yaml` (OpenAPI 3.1) covering all endpoint groups in TECHNICAL_DOC §5
       (`npx @redocly/cli lint` passes clean via `redocly.yaml`)
-- [ ] Generate TS API client into `packages/api-client/`
-      (package scaffold + `src/index.ts` written; `npm install`/`openapi-typescript` generation still pending)
-- [ ] CI workflow: Java compile+test, Flutter analyze+test, web/admin eslint+test
-- [ ] Seed script: 3 Phase-1 categories (+ Phase-2 rows with `phase=2`) per PRD §6
+- [x] Generate TS API client into `packages/api-client/`
+      (`npm run generate` → `src/schema.d.ts` + `npm run typecheck` green — re-run after every spec change)
+- [x] CI workflow: `.github/workflows/ci.yml` — 6 jobs on `push` to `main` + `pull_request`:
+      backend `./mvnw -B test` · OpenAPI `redocly lint` + api-client generate/typecheck ·
+      `apps/web` lint+tsc+build · `apps/admin` lint+tsc+build · API boot+seed smoke test ·
+      `flutter analyze` + `flutter test`
+- [x] Seed script: `scripts/seed.sh` + `scripts/seed_content.sql` — 3 Phase-1 categories (+ Phase-2
+      rows with `phase=2`), 13 subcategories, 4 courses, 12 lessons with full AI-Teacher fields,
+      12 curated YouTube videos; idempotent (safe to run twice), additive (never deletes)
 
 **DoD:** `docker-compose up` → `GET /healthz` returns 200; CI green on empty scaffold; OpenAPI lint passes.
-**Status:** OpenAPI lint ✅ · Spring Boot scaffold + platform layer ✅ · compile/boot check pending.
+**Status:** ✅ **Complete (2026-09-26)** — OpenAPI lint valid · Spring Boot scaffold + platform layer
+· TS client generates/typechecks · CI workflow verified job-by-job locally · seed verified twice
+against a fresh DB (migrations V1–V20).
 
 ## Milestone 1 — Auth (consumer + admin)
 - [x] `users`, `admin_users`, `refresh_tokens` migrations (Flyway V1)
@@ -98,10 +141,11 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 - [x] Lessons module: public reads (`/courses/:slug`, `/lessons/:slug`), admin CRUD, draft invisibility, YouTube-ID regex validation
 - [x] Search endpoint + featured-home endpoint (basic)
 - [x] Admin audit logging middleware on all admin writes (`@Audited`)
-- [ ] Seed: Technology/Business & Finance/Languages demo courses + lessons with real curated YouTube IDs
+- [x] Seed: Technology/Business & Finance/Languages demo courses + lessons with real curated YouTube IDs
+      (`scripts/seed.sh` + `scripts/seed_content.sql` — idempotent, additive, verified on a fresh DB)
 
 **DoD:** consumer tree shows only Phase-1 nodes even though Phase-2 rows exist; a draft lesson is invisible publicly; admin CRUD round-trips with audit rows.
-**Status:** Taxonomy + Lessons fully implemented. Recursive tree building, depth guard, slug uniqueness, draft invisibility, YouTube validation. Seed data pending.
+**Status:** Taxonomy + Lessons fully implemented. Recursive tree building, depth guard, slug uniqueness, draft invisibility, YouTube validation. Seed data ✅ (2026-09-26).
 
 ## Milestone 3 — AI Teacher
 - [x] `ai` module: `LLMProvider` interface + `OpenAiCompatibleProvider` (config: AI_BASE_URL/AI_API_KEY/AI_MODEL)
@@ -141,23 +185,39 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 **Status:** UI + tests done (`flutter analyze` clean, 15/15 passing incl. goldens). The E2E
 journey against the local API remains — blocked until M1 (auth) and M2 (content) endpoints exist.
 
-## Milestone 6 — Consumer Web App (React)
-- [ ] Vite + React + TS + Tailwind + TanStack Query; generated api-client wired
-      (⚠️ current `apps/web` is a Next.js mock UI — re-scaffold per TECHNICAL_DOC §3)
-- [ ] Screens mirror mobile 1:1 (same routes/flows), responsive layout
-- [ ] YouTube IFrame embed; AdSlot web analog
-- [ ] Shared consumer auth flows (login/register/refresh) using same backend endpoints
-- [ ] Vitest/RTL tests on critical flows
+## Milestone 6 — Consumer Web App (Next.js 16)
+> **Scope change (confirmed by the build):** the earlier "Vite + TanStack Query re-scaffold" plan is
+> **dropped** — `apps/web` stays on Next.js 16 (App Router) + React 19 + TS + Tailwind v4, because the
+> blog / verify / RSS / sitemap / `llms.txt` routes are server-rendered Next routes and the learner
+> shell already exists. See PRD §8 "Web-only additions".
+- [x] Next.js 16 App Router shell (`app/page.tsx` learner SPA + `SiteShell`), responsive layout
+- [x] Screens mirroring mobile: welcome · register · interests · home · category · subcategory ·
+      course · lesson · ai-chat · library · profile · subscription · resources · login
+- [x] Shared consumer auth flows (register/login/refresh/logout) against the same backend endpoints
+- [x] Certificate tab (free-attempt/402/credit/result state machine, Stripe + MarzPay, issued list)
+- [x] Blog + credential verification + SEO/GEO routes (`/blog`, `/blog/[slug]`, `/verify/[code]`,
+      `/rss.xml`, `/llms.txt`, `sitemap.ts`, JSON-LD/breadcrumbs/FAQ components)
+- [ ] **Real catalog data**: course/lesson/AI-chat screens still render mock data (`lib/data.ts`)
+      instead of `fetchTaxonomyTree` / `fetchCourse` / `fetchLesson` (those API helpers already exist
+      in `lib/api.ts` — wiring is the remaining work)
+- [ ] YouTube IFrame embed in the lesson screen (currently a placeholder poster image)
+- [ ] Progress writes (PUT progress / bookmarks) from the lesson + library screens
+- [ ] AdSlot web analog (server-driven placement config)
+- [ ] Component/unit tests on critical flows (none configured; CI currently runs lint + tsc + build)
 
-**DoD:** same journey as Milestone 5 passes in the browser; layout works at mobile/tablet/desktop widths.
+**DoD:** same journey as Milestone 5 passes in the browser against the local API; layout works at mobile/tablet/desktop widths.
 
-## Milestone 7 — Admin Web App
-- [ ] Vite + React + TS app with admin-only auth
-      (⚠️ current `apps/admin` is a Next.js mock UI with TaxonomyManager/LessonEditor/ReviewDashboard — re-scaffold per TECHNICAL_DOC §3)
-- [ ] Taxonomy Manager (tree UI, reorder, phase toggle)
-- [ ] Lesson Editor (all content fields + quiz editor) + Video Curation (paste URL → preview, set primary/alternates, status, review date)
-- [ ] Review Dashboard (flagged/unavailable queue) + audit log viewer
-- [ ] RTL tests on editors
+## Milestone 7 — Admin Web App (Next.js 16)
+> Same decision as M6: `apps/admin` stays on Next.js 16 + Tailwind v4 (no Vite re-scaffold).
+- [x] Next.js app with admin-only auth (`api.auth.login/refresh/logout`, admin JWT audience)
+- [x] Taxonomy Manager (tree UI, create/edit, phase toggle)
+- [x] Lesson Editor (all content fields + quiz editor) + Video Curation (paste URL → attach, set
+      primary/alternates, status, review date, AUTO/CURATED badges, "Auto-find video")
+- [x] Review Dashboard (flagged/unavailable queue)
+- [x] Blog Manager (Markdown authoring + live preview) + Certificates Studio (design/pricing with live
+      preview, final-test editor, credentials) + AI Settings, Quick Lesson, Resources, Campus Library
+- [ ] Audit-log viewer (rows are written via `@Audited`; no viewer UI yet)
+- [ ] RTL tests on editors (none configured; CI runs lint + tsc + build)
 
 **DoD:** a curator can create category → course → lesson → attach video → publish, and it appears in mobile + web within cache TTL.
 
@@ -202,7 +262,7 @@ journey against the local API remains — blocked until M1 (auth) and M2 (conten
 - [x] `LessonsService.getLessonBySlug`: runtime auto-fill when lesson has zero videos (best-effort, never 500s) + curated-first `resolvePrimaryVideo` (approved curated primary → newest approved curated → auto → null; flagged/unavailable primary ignored)
 - [x] Sweep: `@EnableScheduling` on `ProfyApplication`; `AutoCurationSweepJob` daily 03:00 UTC (cron overridable via `profy.auto-curation-sweep-cron`), cap 50 lessons/run; `LessonRepository.findPublishedLessonsWithoutVideos()`
 - [x] Admin API: `POST /api/v1/admin/lessons/{id}/videos/auto` (`@Audited`, 400 when key unset or nothing found) in `AdminLessonsController` + `LessonsService.autoCurateVideo`; admin UI: AUTO/CURATED badges on video cards + "⚡ Auto-find video" button in `VideoPanel` + `api.videos.autoFind`
-- [x] Docs sweep: README features bullet + env var, PRD §5 non-goals + §7.2 principle/workflow, TECHNICAL_DOC §4.2 schema + §6.10 worker, `backend/api/openapi.yaml` (`source` on VideoCandidate + new endpoint)
+- [x] Docs sweep: README features bullet + env var, PRD §5 non-goals + §7.2 principle/workflow, TECHNICAL_DOC §4.2 schema + worker section (§6.11 today), `backend/api/openapi.yaml` (`source` on VideoCandidate + new endpoint)
 - [x] Tests: 11 new `AutoCurationServiceTest` (persist fields, skip-if-covered, no-key no-op, no-results, dup-ID skip, race, sweep caps) + 5 new resolution tests in `LessonsServiceTest`; removed stale `findByLessonIdAndIsPrimaryTrue` stubs
 - [x] Bonus: fixed 3 pre-existing `TaxonomyServiceTest` failures (missing save stub; depth test used depth-1 parent instead of depth-2 leaf; parent lookup happens before slug check → no slug stub needed)
 
@@ -212,19 +272,83 @@ Key files: `backend/src/main/java/com/profy256/profy/modules/lessons/**` (servic
 
 ---
 
+## Milestone 12 — Certificates + Markdown Blog + SEO/GEO — REQUESTED 2026-09-25
+> Rules of the build: loose coupling (no cross-module service→service calls where an event/port will do),
+> failure of any one subsystem (email, PDF, payments) must never break another (webhook → transaction →
+> publish → idempotent listener), server-side authority on every gate (progress %, attempt count, score).
+>
+> **Product rules:** free 1st final-test attempt once learner progress ≥ 50% (threshold admin-editable);
+> every further attempt costs a `test_credit` ($2.00 Stripe / 7,500 UGX MarzPay, admin-editable);
+> pass = score ≥ 70% (admin-editable) AND `confirmName` → certificate with public `/verify/{code}`;
+> lesson quizzes stay ungraded practice (final test reads course-level `final_test jsonb`).
+
+- [x] **Migrations V16–V20**: `final_test`/cert snapshot columns + `test_attempts` · `test_credits` ·
+      `blog_posts` · `certificate_settings` (singleton row) · `certificate_definitions` (+ `certificates.definition_id`)
+- [x] **Backend decoupling**: `PaymentSucceededEvent` / `CertificateIssuedEvent` / `CourseProgressUpdatedEvent`
+      (AFTER_COMMIT listeners); `CertificateNotifier` (async email/PDF, never on request thread),
+      `CertificateTemplate.applyOverrides`, `CertificateStateWriter`; billing → cert credit flow via
+      `TestCreditGranter` + `TestCreditCheckoutService` (idempotent grant/consume)
+- [x] **Gates & abuse control**: Redis submit lock (60s) + hourly counter (10/h) → 429; first attempt free
+      iff `attempts==0 && progress≥threshold`, else `test_credit` consumed; 402 when locked
+- [x] **PDF/PNG certificates**: PDFBox 3.0.4 + zxing 3.5.3, rendered from `certificate_definitions` +
+      admin overrides (`CertificateTemplate`), public `GET /verify/{code}[/pdf|/png]`
+- [x] **Email**: `EmailSender` port + Resend adapter (no-op / logged when `RESEND_API_KEY` unset)
+- [x] **Security**: permitAll for `GET /blog`, `/blog/**`, `/verify/**`, `GET /certificates/definitions`;
+      final-test routes declared `authenticated()` (public catalog matcher no longer leaks them)
+- [x] **Blog backend**: `BlogService` (published-only public reads, admin CRUD, slug/status/reading-time/tags),
+      `GET /api/v1/blog`, `/blog/{slug}`, `GET|POST|PUT|PATCH|DELETE /api/v1/admin/blog/**` (`@Audited`)
+- [x] **OpenAPI**: ~25 new paths, `certificates`/`blog` tags, `PaymentRequired` (402), all new schemas;
+      removed duplicate `VideoInput` + duplicate schema body; **`npx @redocly/cli lint` VALID**
+- [x] **api-client**: `npm install` → `generate` → `typecheck` all pass
+- [x] **Admin UI**: `BlogManager.tsx` (Markdown authoring + live preview), `CertificateStudio.tsx`
+      (Design & Pricing w/ live preview · Final Tests editor · Credentials · Issued),
+      `api.blog` + `api.certificates`, Sidebar/page entries (`certificates`, `blog`) — `tsc` clean
+- [x] **Web UI**: `CertificateTab.tsx` (loading/locked/intro/test/result/signed-out, Stripe redirect +
+      MarzPay polling, `CertificateList`), CourseScreen Certificate tab + Profile "Credentials",
+      quiz answer-leak fix in `LessonScreen` (reveal only after "Check answers")
+- [x] **Web SEO/GEO**: `/blog`, `/blog/[slug]`, `/verify/[code]`, `/rss.xml`, `/llms.txt`, rewritten
+      `sitemap.ts` (real routes only), `.prose` styles, `server-api.ts`/`blog.ts`/`markdown.ts`
+      (marked + sanitize-html, server-rendered), Blog link in the SPA sidebar
+- [x] **Verified**: `./mvnw test` 108/108 · `apps/web` `tsc` + lint (0 errors) + `next build` ✅ ·
+      live boot on fresh DB (V16–V20 apply, `/healthz` 200, blog/verify/definitions smoke ✅)
+- [x] **Live learner journey smoke test** ✅ 2026-09-25 — register → state (67% progress, free
+      attempt ready, answer key stripped) → failed attempt #1 (free) → state flips to locked →
+      **402** without a credit → Stripe checkout without a key = clean **400** (no 500) → credit
+      granted → pass-without-confirmName = **400** *and the credit rolled back* → passing attempt
+      consumed the credit → certificate `CFNG2N8GVU` → `GET /certificates` 1 item → public
+      `GET /verify/{code}` 200 → **PDF 200 (`%PDF-`, 5 KB)** → **PNG 200 (`PNG`, 94 KB)** →
+      async email logged `Email skipped (RESEND_API_KEY empty)` on a worker thread
+- [x] **Docs & config**: `docs/TECHNICAL_DOC.md` (§4.8 certificates/test credits, §4.9 blog, §5 new
+      endpoint groups, §6.10 module design, §8 env vars, migration path fixed) · `ADMIN_GUIDE.md`
+      (§9 Certificates studio, §10 Blog Manager) · `README.md` (feature bullets + env vars) ·
+      `.env.example` (`RESEND_API_KEY`, `RESEND_FROM`, `SITE_URL`)
+- [x] **Final sweep** ✅ all green — `./mvnw test` **108/108** · `redocly lint` **valid** ·
+      api-client `generate` + `typecheck` ✅ · `apps/web` `tsc` + lint **0 errors** + `next build` ✅ ·
+      `apps/admin` `tsc` ✅ + `next build` ✅ · `apps/admin` lint **0 errors / 10 warnings** after the
+      15 pre-existing errors were fixed (2026-09-26 — see Milestone 0 session note)
+
+> Dev-DB fixtures left in the local docker Postgres (port 5434) for manual QA: 2 `smoke-*` published
+> lessons under `french-for-beginners`, a `final_test` (4 questions, pass 70) on that course, learner
+> `smoke.learner@example.com`, and issued certificate `CFNG2N8GVU`.
+
+**DoD:** a learner at ≥50% progress passes the free first attempt and gets a verifiable certificate;
+a second attempt requires a paid credit; blog posts authored in admin render as sanitised Markdown at
+`/blog`; the certificate design/pricing is editable without a deploy; all four toolchains above are green.
+
 ## Milestone Status
 
 | Milestone | Status | Notes |
 |---|---|---|
-| 0 — Scaffolding & Contracts | 🚧 In progress | Java/Spring Boot scaffolded + compiles. TS client gen, CI, seed script, boot+healthz check pending |
-| 1 — Auth | 🚧 Tests pending | Full auth logic: register/login/refresh/logout, JWT audience separation, refresh rotation+revocation, bcrypt(12). IP rate limits + tests pending |
-| 2 — Taxonomy & Content | 🚧 Tests pending | Recursive tree, CRUD, draft invisibility, YouTube validation, search, featured, audit logging. Seed data + tests pending |
-| 3 — AI Teacher | 🚧 Tests pending | LLMProvider + OpenAiCompatibleProvider, circuit breaker, Redis rate limits, grounding prompt, session persistence. Tests pending |
-| 4 — Progress & Library | 🚧 Tests pending | Course completion derivation, continue-learning, bookmarks, quiz attempts, profile stats. Tests pending |
-| 5 — Mobile App | ✅ Complete | Flutter app: all PRD §8 screens, bottom nav, AdSlot, AI degradation UI; 15 tests passing incl. goldens |
-| 6 — Consumer Web | ⬜ Not started | Next.js mock UI exists in `apps/web` (needs Vite re-scaffold) |
-| 7 — Admin Web | ⬜ Not started | Next.js mock UI exists in `apps/admin` (needs Vite re-scaffold) |
-| 8 — Billing | ⬜ Not started | |
-| 9 — Worker | ⬜ Not started | Worker stub exists; M9 job pending |
-| 10 — Hardening & Launch | ⬜ Not started | |
-| 11 — Auto Video Curation | 🚧 Nearly done (2026-09-15) | Curated-first + YouTube auto fallback implemented end-to-end; 94/94 backend tests green, admin tsc clean. Remaining: live-DB Flyway V9 boot check, review-dashboard highlighting of auto rows |
+| 0 — Scaffolding & Contracts | ✅ Complete (2026-09-26) | Monorepo, Spring Boot platform layer, OpenAPI 3.1 (redocly valid), TS client generate+typecheck, **6-job CI** (`.github/workflows/ci.yml`, verified job-by-job locally), **idempotent seed** (`scripts/seed.sh`), compose stack |
+| 1 — Auth | 🚧 Nearly done | register/login/refresh/logout, JWT audience separation, refresh rotation+revocation, bcrypt(12), `AuthServiceTest`/`AdminAuthServiceTest` green. Remaining: IP rate limits on auth endpoints |
+| 2 — Taxonomy & Content | ✅ Complete (2026-09-26) | Recursive tree, CRUD, draft invisibility, YouTube validation, search, featured, audit logging + **seed data** (13 subcategories, 4 courses, 12 lessons, 12 curated videos) |
+| 3 — AI Teacher | 🚧 Tests pending | LLMProvider (OpenAI/Anthropic/Gemini) + provider failover, circuit breaker, Redis rate limits, grounding prompt, session persistence, multi-turn history. Remaining: golden-file prompt tests |
+| 4 — Progress & Library | 🚧 Tests pending | Course completion derivation, continue-learning, bookmarks, quiz attempts, profile stats — all live. Remaining: service-layer tests (no `ProgressServiceTest` yet) |
+| 5 — Mobile App | ✅ Complete | Flutter app: all PRD §8 screens, bottom nav, AdSlot, AI degradation UI; **15/15 tests** incl. goldens (tolerant golden comparator added 2026-09-26) |
+| 6 — Consumer Web | 🚧 In progress | Next.js 16 learner SPA: auth, resources, certificate tab, blog + verify + SEO routes are live; **course/lesson/AI-chat screens still render mock data**, YouTube embed + AdSlot + tests pending (Vite re-scaffold plan dropped — see M6) |
+| 7 — Admin Web | 🚧 Nearly done | Next.js 16, admin auth, all managers wired to the API (taxonomy, lesson+video curation, review, blog, certificates, AI settings, resources, quick lesson). Remaining: audit-log viewer, editor tests |
+| 8 — Billing | 🚧 In progress | Test-credit purchases live (Stripe checkout, MarzPay polling, idempotent grant/consume, 402 gate). Remaining: subscriptions + entitlement endpoint, ad-serving keyed on entitlement, webhook tests |
+| 9 — Worker | 🚧 Infrastructure ready | Worker process runs the same JAR on `--spring.profiles.active=worker`; scheduling in place (`AutoCurationSweepJob` daily 03:00 UTC). Remaining: M9's oEmbed video-availability sweep (nothing writes `video_checks` yet) |
+| 10 — Hardening & Launch | 🚧 In progress | CI on every push/PR, Redis rate limits (AI + final test), CORS + error handling fixed, security matcher sweep. Remaining: load smoke, Sentry, prod deploy, store assets |
+| 11 — Auto Video Curation | ✅ Complete (2026-09-26) | Curated-first resolution + YouTube auto fallback + daily sweep + admin AUTO/CURATED badges + "Auto-find video"; 11 `AutoCurationServiceTest` + 5 resolution tests green; Flyway V1–V20 verified on a fresh DB (V9 included) |
+| 12 — Certificates + Blog + SEO | ✅ Complete (2026-09-25) | Backend V16–V20, cert/test-credit/email/PDF ports, blog module, OpenAPI + api-client green, admin BlogManager/CertificateStudio, web CertificateTab + /blog + SEO routes. 108/108 tests, web build ✅. Live journey smoke-tested (402 gate, credit rollback, cert issue, verify + PDF/PNG); docs + .env updated; sweep green (108/108, redocly valid, web 0 lint errors + build) |

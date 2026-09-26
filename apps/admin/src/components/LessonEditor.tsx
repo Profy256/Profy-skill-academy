@@ -330,48 +330,63 @@ export default function LessonEditor() {
   const [showNewForm, setShowNewForm] = useState(false);
   const [newLesson, setNewLesson] = useState({ title: "", nodeId: "", description: "" });
 
-  const fetchLessons = useCallback(async (nodeId?: string) => {
-    try {
-      setLoading(true);
-      const data = await api.lessons.list(nodeId);
-      setLessons(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load lessons");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchLessons = useCallback(
+    (nodeId?: string) =>
+      Promise.resolve()
+        .then(() => {
+          setLoading(true);
+          return api.lessons.list(nodeId);
+        })
+        .then((data) => {
+          setLessons(data);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to load lessons");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
-  const fetchCourses = useCallback(async () => {
-    try {
-      const data = await api.taxonomy.list();
-      const courseNodes: TaxonomyApiNode[] = [];
-      const extractCourses = (nodes: TaxonomyApiNode[]) => {
-        for (const n of nodes) {
-          if (n.nodeType === "course") courseNodes.push(n);
-          if (n.children) extractCourses(n.children);
-        }
-      };
-      extractCourses(data);
-      setCourses(courseNodes);
-    } catch (err) {
-      console.error("Failed to load courses", err);
-    }
-  }, []);
+  const fetchCourses = useCallback(
+    () =>
+      api.taxonomy
+        .list()
+        .then((data) => {
+          const courseNodes: TaxonomyApiNode[] = [];
+          const extractCourses = (nodes: TaxonomyApiNode[]) => {
+            for (const n of nodes) {
+              if (n.nodeType === "course") courseNodes.push(n);
+              if (n.children) extractCourses(n.children);
+            }
+          };
+          extractCourses(data);
+          setCourses(courseNodes);
+        })
+        .catch((err) => {
+          console.error("Failed to load courses", err);
+        }),
+    []
+  );
 
   useEffect(() => {
     fetchLessons();
     fetchCourses();
   }, [fetchLessons, fetchCourses]);
 
-  const fetchDetail = useCallback(async (id: string) => {
-    try {
-      const data = await api.lessons.get(id);
-      setDetail(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load lesson");
-    }
-  }, []);
+  const fetchDetail = useCallback(
+    (id: string) =>
+      api.lessons
+        .get(id)
+        .then((data) => {
+          setDetail(data);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to load lesson");
+        }),
+    []
+  );
 
   useEffect(() => {
     if (selectedId) fetchDetail(selectedId);

@@ -21,34 +21,45 @@ export default function ResourcesManager() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const fetchResources = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await api.resources.list();
-      setResources(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load resources");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchResources = useCallback(
+    () =>
+      Promise.resolve()
+        .then(() => {
+          setLoading(true);
+          return api.resources.list();
+        })
+        .then((data) => {
+          setResources(data);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to load resources");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
-  const fetchCourses = useCallback(async () => {
-    try {
-      const data = await api.taxonomy.list();
-      const courseNodes: TaxonomyApiNode[] = [];
-      const extractCourses = (nodes: TaxonomyApiNode[]) => {
-        for (const n of nodes) {
-          if (n.nodeType === "course") courseNodes.push(n);
-          if (n.children) extractCourses(n.children);
-        }
-      };
-      extractCourses(data);
-      setCourses(courseNodes);
-    } catch (err) {
-      console.error("Failed to load courses", err);
-    }
-  }, []);
+  const fetchCourses = useCallback(
+    () =>
+      api.taxonomy
+        .list()
+        .then((data) => {
+          const courseNodes: TaxonomyApiNode[] = [];
+          const extractCourses = (nodes: TaxonomyApiNode[]) => {
+            for (const n of nodes) {
+              if (n.nodeType === "course") courseNodes.push(n);
+              if (n.children) extractCourses(n.children);
+            }
+          };
+          extractCourses(data);
+          setCourses(courseNodes);
+        })
+        .catch((err) => {
+          console.error("Failed to load courses", err);
+        }),
+    []
+  );
 
   useEffect(() => {
     fetchResources();

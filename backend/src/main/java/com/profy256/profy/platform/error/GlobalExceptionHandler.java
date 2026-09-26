@@ -40,6 +40,12 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", Map.of("code", "conflict", "message", ex.getMessage())));
     }
 
+    @ExceptionHandler(PaymentRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handlePaymentRequired(PaymentRequiredException ex) {
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .body(Map.of("error", Map.of("code", "payment_required", "message", ex.getMessage())));
+    }
+
     @ExceptionHandler(AiUnavailableException.class)
     public ResponseEntity<Map<String, Object>> handleAiUnavailable(AiUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

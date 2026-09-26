@@ -16,7 +16,7 @@
 | # | PRD open question | Decision | Rationale |
 |---|---|---|---|
 | D1 | Mobile stack (§9) | **Flutter** | User choice. Single codebase for iOS/Android. No code sharing with React web apps — shared contracts live in the OpenAPI spec instead. |
-| D2 | Service boundaries (§4.1) | **Modular monolith (Java / Spring Boot 3)** with strict internal module boundaries + separate worker binary | Failure-isolation principle is enforced by module boundaries, per-module error recovery, and circuit breakers. Spring Boot provides mature ecosystem for security, data access, and observability. Modules can be extracted to services later without rewrites. |
+| D2 | Service boundaries (§4.1) | **Modular monolith (Java / Spring Boot 3)** with strict internal module boundaries + separate worker process (same JAR, `worker` profile) | Failure-isolation principle is enforced by module boundaries, per-module error recovery, and circuit breakers. Spring Boot provides mature ecosystem for security, data access, and observability. Modules can be extracted to services later without rewrites. |
 | D3 | Web app timing (Q5) | **Ships together with mobile** in Phase 1 | User decision. Consumer auth and data are shared from day one. |
 | D4 | AI provider | **Provider-agnostic adapter** using the **OpenAI-compatible chat-completions interface** | One adapter covers OpenAI, OpenRouter, Google Gemini (OpenAI-compat endpoint), and any other compatible API. Provider is a config value, not code. |
 | D5 | Premium gating (Q1) | **Ad-free only.** All lesson content is open to Free users at MVP | Simplest shippable model; no paywall logic in content APIs. |
@@ -33,7 +33,7 @@ Three independent frontends, one Java backend, shared PostgreSQL + Redis.
 ```
 ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
 │  Mobile app  │   │  Web app     │   │  Admin app   │
-│  (Flutter)   │   │  (React+TS)  │   │  (React+TS)  │
+│  (Flutter)   │   │ (Next.js 16) │   │ (Next.js 16) │
 └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
        │  consumer JWT    │  consumer JWT    │  admin JWT (separate audience)
        └────────┬─────────┴─────────┬────────┘
@@ -41,15 +41,16 @@ Three independent frontends, one Java backend, shared PostgreSQL + Redis.
         ┌─────────────────────────────────┐
         │       Java API (Spring Boot modular monolith)│
         │  auth │ taxonomy │ lessons │ ai │
-        │  progress │ billing │ adminops  │
+        │  progress │ billing │ adminauth │
+        │  adminops │ certificates │ blog │
         └───────┬─────────────────┬───────┘
                 ▼                 ▼
         ┌──────────────┐  ┌──────────────────┐
-        │ PostgreSQL   │  │ Worker (Go)      │
-        │ (shared)     │  │ video-availability│
-        └──────────────┘  │ checks, jobs     │
-                ▲         └──────────────────┘
-        ┌──────────────┐
+        │ PostgreSQL   │  │ Worker (same JAR)│
+        │ (shared)     │  │ profile=worker:  │
+        └──────────────┘  │ availability +   │
+                ▲         │ scheduled jobs   │
+        ┌──────────────┐  └──────────────────┘
         │ Redis        │  cache, rate limits, refresh-token store
         └──────────────┘
                 ▲
@@ -63,10 +64,10 @@ Three independent frontends, one Java backend, shared PostgreSQL + Redis.
 
 ### 2.1 Failure-Isolation Rules (PRD §4.1 — non-negotiable)
 
-1. Every HTTP handler runs behind a per-request `recover` middleware; a panic in one module returns 500 for that request only.
+1. Every HTTP handler runs behind the global exception handler (`@RestControllerAdvice` / `GlobalExceptionHandler`); an exception in one module returns an error response for that request only — never a crashed process.
 2. **AI Teacher degradation contract:** if the AI module errors, times out, or its circuit breaker is open, the API returns `503 { "error": "ai_unavailable" }`. Clients treat this as "chat unavailable" and the lesson (video + written content) remains fully usable. AI failure can never break the lesson screen.
 3. Admin CRUD endpoints and consumer read endpoints share no code path beyond middleware; a bad admin deploy can't corrupt consumer reads (validated at review; separate route groups, separate auth).
-4. The worker is a separate binary (`cmd/worker`): if video-availability checks crash or hang, the API is unaffected.
+4. The worker is the same Spring Boot JAR started with `--spring.profiles.active=worker` (a separate process from the API): if video-availability checks or a scheduled job crash or hang, the API is unaffected.
 5. Modules communicate through their exported service interfaces, never by reaching into another module's repository or tables.
 6. Mobile and web clients are independently deployable and versioned; all shared contract lives in the OpenAPI spec (`backend/api/openapi.yaml`).
 
@@ -97,17 +98,22 @@ profy-skill-academy/
 │   │       ├── progress/                            # completion, bookmarks, quiz attempts
 │   │       ├── billing/                             # Stripe webhooks, RevenueCat, entitlements
 │   │       ├── adminauth/                           # separate admin auth layer
-│   │       └── adminops/                            # curator CRUD + review dashboard endpoints
+│   │       ├── adminops/                            # curator CRUD + review dashboard endpoints
+│   │       ├── certificates/                        # final test, issuing, PDF/QR rendering
+│   │       └── blog/                                # admin-authored Markdown posts
 │   └── src/main/resources/
 │       ├── application.yml                          # Spring Boot config
-│       └── db/migration/                            # Flyway SQL migrations
+│       └── db/migration/                            # Flyway SQL migrations (V1–V20)
 ├── apps/
 │   ├── mobile/                  # Flutter (consumer)
-│   ├── web/                     # React + TypeScript + Vite (consumer)
-│   └── admin/                   # React + TypeScript + Vite (curator/admin)
+│   ├── web/                     # Next.js 16 App Router (consumer)
+│   └── admin/                   # Next.js 16 App Router (curator/admin)
 ├── packages/
 │   └── api-client/              # generated TS client from openapi.yaml (web + admin)
-├── docker-compose.yml           # postgres, redis, api, worker (local dev)
+├── scripts/
+│   ├── seed.sh                  # psql runner for the content seed (idempotent)
+│   └── seed_content.sql         # categories, courses, lessons, curated videos
+├── docker-compose.yml           # postgres, redis, api, worker, web, admin (local dev)
 └── .github/workflows/ci.yml
 ```
 
@@ -115,20 +121,20 @@ profy-skill-academy/
 
 | Layer | Tech |
 |---|---|
-| Backend | Java 21+, Spring Boot 3.2+, Spring Web, Spring Data JPA (Hibernate), Spring Data Redis (Lettuce), Spring Security, Flyway, SLF4J + Logback |
+| Backend | Java 17, Spring Boot 3.3.4 (Maven wrapper `./mvnw`), Spring Web, Spring Data JPA (Hibernate), Spring Data Redis (Lettuce), Spring Security, Flyway (V1–V20), SLF4J + Logback |
 | DB / cache | PostgreSQL 16, Redis 7 |
 | Mobile | Flutter 3.x, Dart, Riverpod, go_router, `youtube_player_iframe`, dio |
-| Web + Admin | React 18, TypeScript, Vite, TanStack Query, Tailwind CSS |
+| Web + Admin | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, `output: "standalone"` |
 | API contract | OpenAPI 3.1, generated TS client; Flutter client hand-written against the same spec |
 | Infra | Docker Compose (dev), single VPS or Fly.io/Railway (prod Phase 1) |
-| CI | GitHub Actions: lint + tests on every PR |
+| CI | GitHub Actions: tests, lint, typecheck, builds + API smoke on `main` and every PR |
 
 ---
 
 ## 4. Data Model (PostgreSQL)
 
 All tables use `uuid` PKs (`gen_random_uuid()`), `created_at`/`updated_at timestamptz`.
-Schema lives in `backend/migrations/`.
+Schema lives in `backend/src/main/resources/db/migration/` (Flyway V1–V20).
 
 ### 4.1 Taxonomy (recursive — PRD §6)
 
@@ -305,6 +311,66 @@ audit_log (id uuid PK, admin_user_id uuid, action text, entity text, entity_id u
            payload jsonb, created_at)   -- every admin write is logged
 ```
 
+### 4.8 Certificates, final test & retake credits (M12)
+
+```sql
+-- taxonomy_nodes gains (V16):
+final_test jsonb                   -- [{question, options[2+], answerIndex}] — the answer key
+                                   -- NEVER leaves the server (stripped before serialising)
+final_test_pass_percent integer    -- per-course override; falls back to settings (70)
+
+certificates (V16 + V20)           -- snapshot columns keep a credential truthful after the
+  id uuid PK,                       -- course or template is edited later
+  user_id, course_node_id,
+  definition_id uuid REFERENCES certificate_definitions(id),
+  cert_code text UNIQUE,            -- public /verify/{code}
+  course_name, recipient_name,      -- frozen at issue time
+  score int, total int, pass_percent int, progress_percent int,
+  issued_at, revoked_at, email_status, email_sent_at, created_at
+
+test_attempts (V16)                -- one row per graded submission
+  id uuid PK, user_id, course_node_id, score, total, passed,
+  attempt_number int, is_free boolean, created_at
+
+test_credits (V17)                 -- the paid retake / sub-threshold unlock
+  id uuid PK, user_id, course_node_id,
+  status pending|unused|consumed|failed|refunded,
+  provider stripe|marzpay|admin, provider_ref text UNIQUE,  -- UNIQUE = webhook-retry safe
+  amount int, currency text, consumed_at, created_at, updated_at
+
+certificate_settings (V19, singleton row id '…0011')
+  test_price_cents=200, test_price_ugx=7500,            -- admin-editable pricing
+  free_attempt_progress_percent=50, default_pass_percent=70,
+  test_title, test_instructions,
+  cert_heading/intro/achieved/course_label/score_label/date_label/code_label,
+  cert_signature_name/title, cert_footer, cert_org_name,
+  cert_primary_color, cert_accent_color, cert_paper_size, cert_show_qr, cert_enabled
+
+certificate_definitions (V20)      -- named credentials a course can award
+  id uuid PK, name, slug, short_name, description, badge_color, course_node_id,
+  require_final_test, require_course_complete, pass_percent, min_progress_percent,
+  auto_issue, cert_*_override fields, is_enabled, sort_order
+```
+
+**Gate rules (server-enforced, `CertTestService`):** attempt #1 is free iff `attempts == 0 AND
+progress ≥ free_attempt_progress_percent`; every later attempt atomically consumes a `test_credits`
+row (or `402 payment_required`); passing (≥ pass percent) *and* `confirmName=true` issues the
+certificate. Submission is serialised per learner with a Redis lock (60s) + hourly counter (10/h → 429).
+
+### 4.9 Blog posts (V18)
+
+```sql
+blog_posts (
+  id uuid PK, slug text UNIQUE, title text, excerpt text,
+  content_md text NOT NULL DEFAULT '',      -- author writes Markdown; app renders + sanitises
+  cover_image_url text,
+  tags jsonb NOT NULL DEFAULT '[]',         -- lowercase strings; filtered with jsonb_array_elements_text
+  meta_title text, meta_description text,   -- SEO fields, separate from on-page title/excerpt
+  status draft|published|archived, author_id uuid REFERENCES admin_users(id) ON DELETE SET NULL,
+  published_at, created_at, updated_at
+)
+```
+
 ---
 
 ## 5. API Design
@@ -342,6 +408,25 @@ Billing (auth):
 GET  /entitlement                         # { is_premium, plan, current_period_end }
 POST /billing/checkout                    # web only → Stripe Checkout session URL
 POST /billing/revenuecat-webhook          # mobile IAP events (server-to-server)
+
+Certificates & final test (auth unless marked public):
+GET  /courses/:slug/final-test           # eligibility + pricing + questions (answer key stripped)
+POST /courses/:slug/final-test/attempts  # { answers[], confirmName } → graded server-side
+                                         #   402 payment_required when a credit is required
+POST /billing/cert-test/checkout/stripe  # retake credit → Stripe Checkout (metadata PURPOSE_CERT_TEST_CREDIT)
+POST /billing/cert-test/checkout/marzpay # retake credit → MarzPay collection (UGX)
+GET  /billing/cert-test/status           # poll after redirect; confirms + grants idempotently
+GET  /certificates                       # my credentials
+GET  /certificates/definitions           # PUBLIC credential catalogue
+GET  /verify/:code                       # PUBLIC credential check (holder, course, score, revoked)
+GET  /verify/:code/pdf   /verify/:code/png  # PUBLIC rendered credential (PDFBox + zxing QR)
+CRUD /admin/certificates/*               # settings, definitions, issued (revoke/reinstate)
+CRUD /admin/final-tests/:courseId        # author the course-level test
+
+Blog (public read, admin write):
+GET  /blog?page=&tag=                    # PUBLIC, published only — Markdown + SEO fields
+GET  /blog/:slug                          # PUBLIC full post (content_md rendered by the client)
+CRUD /admin/blog    POST /admin/blog/:id/status   # admin JWT, @Audited
 
 Admin (admin JWT, separate group):
 CRUD /admin/taxonomy                      # recursive create/edit/reorder
@@ -402,10 +487,29 @@ Separate login, separate JWT audience, audit logging middleware. `adminops` expo
 ### 6.9 Roles note (D7)
 `admin_users.role` exists from day one with only `'admin'`. Middleware reads role; when curators are added, insert `role='curator'` rows and tighten the middleware check — **no migration required**.
 
-### 6.10 Worker (`cmd/worker`)
+### 6.10 `certificates` + `blog` (M12, 2026-09-25)
+
+- **`certificates`:** final-test authoring (`FinalTestAuthoringService`), attempt/grading
+  (`CertTestService`), retake-credit purchase + grant (`TestCreditCheckoutService` →
+  `PaymentSucceededEvent` → `TestCreditGranter`), issuing (`CertificateService`), rendering
+  (`CertificateTemplate` + `CertificatePdfRenderer`), public verification, and the email port
+  (`CertificateNotifier` → `EmailSender`/Resend, async, log-and-skip when `RESEND_API_KEY` is empty).
+- **`blog`:** `BlogService` (published-only public reads; admin CRUD with slug derivation, status
+  transitions, reading time, tag normalisation). The API ships Markdown + SEO fields only —
+  rendering (`marked`) and sanitising (`sanitize-html`) happen in `apps/web`, server-side per request.
+- **Failure isolation:** emails and PDF rendering run off the request thread and only publish
+  `CertificateIssuedEvent`/record outcomes afterwards — a Resend or PDFBox outage can never fail a
+  test submission. Payments publish `PaymentSucceededEvent`; listeners are idempotent
+  (`provider_ref` unique) and `AFTER_COMMIT`, so a webhook replay cannot double-grant a credit.
+
+### 6.11 Worker (same JAR, `worker` profile)
+There is no separate worker codebase: the `worker` compose service runs the **same Spring Boot
+JAR** with `--spring.profiles.active=worker`, in its own process, so job failures are isolated
+from the API (§2.1 rule 4).
 - **Video availability checker:** daily job iterates `lesson_videos` where `curator_status='approved'` and checks availability via YouTube oEmbed (`https://www.youtube.com/oembed?url=...`) — no API key needed at MVP. Unavailable → `curator_status='unavailable'`, surfaces in admin review dashboard, and (Phase-1 nice-to-have) consumer API serves the primary alternate instead.
-- **Auto-curation sweep (M11, 2026-09-15):** daily job auto-fills published lessons that have no video rows at all via YouTube Data API v3 search (`YOUTUBE_API_KEY`; unset = disabled). Complements the runtime fallback in `getLessonBySlug` (auto-fill on first learner read). Curated-first resolution: approved curated primary → newest approved curated → auto → none. Search costs 100 quota units/call — runs are capped and only fire for uncovered lessons.
-- Runs on its own schedule (cron-style loop); safe to crash/restart independently of the API.
+- **Auto-curation sweep (M11, 2026-09-15):** daily job auto-fills published lessons that have no video rows at all via YouTube Data API v3 search (`YOUTUBE_API_KEY`; unset = disabled). Complements the runtime fallback in `getLessonBySlug` (auto-fill on first learner read). Curated-first resolution: approved curated primary → newest approved curated → auto → none. Search costs 100 quota units/call — runs are capped and only fire for uncovered lessons. Implemented as `AutoCurationSweepJob` (Spring `@Scheduled`, daily 03:00 UTC).
+- **Async certificate delivery:** certificate email + PDF rendering run off the request thread in the same codebase (§6.10), so a Resend/PDFBox outage never fails a test submission.
+- Scheduled jobs live in this one codebase; the worker process can crash, hang, or restart independently of the API.
 
 ---
 
@@ -419,11 +523,17 @@ Separate login, separate JWT audience, audit logging middleware. `adminops` expo
 - **Ads (D6):** in-house `AdSlot` widget with placement IDs (`home_banner`, `lesson_banner`, `lesson_interstitial`, `library_banner`). Frequency + enablement come from `GET /config` (server-driven). MVP renders a tasteful placeholder; AdMob Flutter SDK drops in behind the same widget later.
 - **Resilience:** AI chat failures show a "AI Teacher is unavailable right now" state; lesson screen never depends on AI. Network errors degrade per-section, not per-screen.
 
-### 7.2 Web (React + TS) — consumer
+### 7.2 Web (Next.js 16 App Router) — consumer
 Mirrors mobile 1:1 (PRD assumption held; D3). Responsive layout, same routes/flows, same generated API client as admin. YouTube IFrame embed. AdSlot web component analog.
 
-### 7.3 Admin (React + TS)
+- **Stack:** Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS v4; scripts `dev | build | start | lint`.
+- **Server-rendered dynamic routes:** `/blog`, `/blog/[slug]`, `/verify/[code]` (plus `/rss.xml`, `/llms.txt`, `/sitemap.xml`, `/robots.txt`) — a pure static export is therefore not possible. Markdown is rendered and sanitised server-side per request (§6.10).
+- **Deploy shape:** `next.config.ts` sets `output: "standalone"`; the app runs as a Node server (`next start` / standalone output) — in compose on port **3002 → 3000**, with `NEXT_PUBLIC_API_URL=http://api:8080`.
+
+### 7.3 Admin (Next.js 16 App Router)
 Screens: Login → Taxonomy Manager (tree UI, drag-order, phase toggle) → Lesson Editor (rich fields incl. quiz JSON editor) → Video Curation (per lesson: candidate list, paste YouTube URL → preview embed, set primary/alternates, curator status, review date) → Review Dashboard (flagged/unavailable queue). Solo-admin auth (D7), audit-logged actions.
+
+- **Stack:** same Next.js 16 / React 19 / TypeScript / Tailwind CSS v4 setup as `apps/web`, also `output: "standalone"` — a Node server, not a static bundle — published on compose port **3003 → 3000**.
 
 ---
 
@@ -440,21 +550,51 @@ AI_BASE_URL=https://openrouter.ai/api/v1   AI_API_KEY=...   AI_MODEL=...
 # Billing
 STRIPE_SECRET_KEY=...              STRIPE_WEBHOOK_SECRET=...
 REVENUECAT_WEBHOOK_AUTH=...
+# Email (Resend) — certificate delivery. Empty key = logged no-op in dev (never breaks a flow).
+RESEND_API_KEY=...                 RESEND_FROM=Dera Skul <onboarding@resend.dev>
+SITE_URL=https://deraskul.com      # base for /verify links printed in emails + PDFs + RSS
+# YouTube Data API v3 — auto-curation sweep; unset = curated-only
+YOUTUBE_API_KEY=...
 # Ads (D6 — reserved for when a network is chosen)
 ADMOB_APP_ID=
 ```
 
-Local dev: `docker-compose up` → Postgres, Redis, API (with migrate-on-start), worker. Mobile: `flutter run` against `http://localhost:8080` (10.0.2.2 for Android emulator). Web/admin: Vite dev servers proxying `/api`.
+`JWT_SECRET` must be at least 32 bytes (256 bits); the app refuses to start with a weaker key (`WeakKeyException`).
+
+Local dev: `docker compose up` → Postgres (published on **localhost:5434**, not 5432), Redis (6379), API (compose maps **8082 → 8080**; default `PORT` is 8080), worker (same JAR, `worker` profile), web (3002), admin (3003). Mobile: `flutter run` against `http://localhost:8080` (10.0.2.2 for Android emulator). Web/admin: Next.js dev servers (`npm run dev`) that read `NEXT_PUBLIC_API_URL` (compose sets `http://api:8080`) — no `/api` proxy.
 
 ---
 
 ## 9. Testing & Quality
 
-- **Backend:** JUnit 5 unit tests per module service; integration tests with Testcontainers against dockerized Postgres; Spring MockMvc for controllers; AI module tested with a fake `LLMProvider`. Target: all modules ≥ 70% on service layer; AI grounding prompts have golden-file tests.
-- **Flutter:** unit tests for repositories/blocs; widget tests for Home, Lesson, AI Chat (mocked dio); one golden test per core screen.
-- **Web/Admin:** Vitest + React Testing Library on critical flows (taxonomy editor, lesson editor, chat).
-- **CI (GitHub Actions):** lint + test all three workspaces on every PR; `main` must stay green.
+- **Backend:** JUnit 5 unit tests per module service — **108 tests**, run with `./mvnw -B test`; integration tests with Testcontainers against dockerized Postgres; Spring MockMvc for controllers; AI module tested with a fake `LLMProvider`. Target: all modules ≥ 70% on service layer; AI grounding prompts have golden-file tests.
+- **Flutter:** `flutter analyze` + `flutter test` — unit tests for repositories/blocs; widget tests for Home, Lesson, AI Chat (mocked dio); one golden test per core screen, with a tolerant golden comparator configured in `apps/mobile/test/flutter_test_config.dart` so font/antialiasing drift across platforms doesn't fail the build.
+- **Web + Admin (Next.js):** no unit-test runner is configured; CI gates them on ESLint (`npm run lint`), `npx tsc --noEmit`, and a production `npm run build` (`next build`) per app.
+- **api-client:** `npm run generate` + `npm run typecheck` against the OpenAPI spec, plus a Redocly lint of `backend/api/openapi.yaml`.
 - **Manual QA gate per milestone:** defined in `todo.md` acceptance criteria.
+
+### 9.1 CI (`.github/workflows/ci.yml`)
+
+Runs on every `push` to `main` and every `pull_request` (concurrency group per ref, in-progress runs cancelled). Six jobs — quality gate only; **nothing is pushed to a container registry by CI today**, image build/push stays a manual step (deploy.md §4):
+
+| Job | Runs |
+|---|---|
+| `backend` | `./mvnw -B test` (Java 17) |
+| `api-spec` | Redocly lint of `backend/api/openapi.yaml`, then `npm ci && npm run generate && npm run typecheck` in `packages/api-client` |
+| `web` | `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run build` in `apps/web` |
+| `admin` | same four steps in `apps/admin` |
+| `api-smoke` | Postgres 16 + Redis 7 services → boot the API → run `./scripts/seed.sh` **twice** → assert ≥3 phase-1 categories, ≥3 lessons in `web-development-basics`, non-empty `primaryVideo`, `GET /api/v1/blog` → 200, `GET /api/v1/verify/NOSUCHCODE` → 404 |
+| `mobile` | `flutter analyze` + `flutter test` (subosito/flutter-action) |
+
+### 9.2 Seed data (`scripts/seed.sh`)
+
+`scripts/seed.sh` is a psql runner for `scripts/seed_content.sql`. It accepts `DATABASE_URL` as
+`postgres://` or `jdbc:postgresql://`, else `PG*` env vars, else compose defaults
+(host `localhost:5434`, db/user/pass `profy`). The seed is **idempotent and additive — it never
+deletes**: 3 phase-1 categories (reuse-or-create via alias slugs), 6 phase-2 categories, 13
+subcategories, 4 courses, 12 published lessons with full AI-Teacher fields
+(description/explanation/objectives/examples/exercises/quizzes), and 12 curated approved YouTube
+videos. Running it twice must be a no-op the second time — CI enforces exactly that.
 
 ---
 
@@ -472,7 +612,7 @@ Local dev: `docker-compose up` → Postgres, Redis, API (with migrate-on-start),
 
 ## 11. Deployment (Phase 1)
 
-Single VPS (or Fly.io/Railway) running: `api` container, `worker` container, managed Postgres, managed Redis. Caddy/Nginx TLS reverse proxy. deploys are per-binary — API and worker can deploy independently (failure-isolation). Mobile ships via Play Store / App Store (TestFlight → closed testing first). Web/admin are static builds behind the same proxy.
+Single VPS (or Fly.io/Railway) running: `api` container, `worker` container (same JAR, `worker` profile), managed Postgres, managed Redis. Caddy/Nginx TLS reverse proxy. The api and worker images deploy independently (failure-isolation). Mobile ships via Play Store / App Store (TestFlight → closed testing first). Web/admin are Next.js `output: "standalone"` Node servers behind the same proxy — not static bundles.
 
 Backups: Postgres daily snapshots. Observability: structured JSON logs (SLF4J + Logback) + `/healthz` uptime check; Sentry SDKs on all three clients (Phase-1 nice-to-have).
 

@@ -185,18 +185,25 @@ export default function TaxonomyManager() {
   const [addingType, setAddingType] = useState<NodeType>("course");
   const [newLabel, setNewLabel] = useState("");
 
-  const fetchTree = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.taxonomy.list();
-      setTree(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load taxonomy");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchTree = useCallback(
+    () =>
+      Promise.resolve()
+        .then(() => {
+          setLoading(true);
+          setError(null);
+          return api.taxonomy.list();
+        })
+        .then((data) => {
+          setTree(data);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to load taxonomy");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
   useEffect(() => {
     fetchTree();

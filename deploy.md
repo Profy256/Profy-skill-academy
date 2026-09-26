@@ -49,7 +49,7 @@ Source of truth: `backend/.env.example`. Secrets live in the deployment secret s
 |---|---|---|
 | `DATABASE_URL` | api, worker, migrate | `postgres://profy:•••@db-host:5432/profy?sslmode=require` |
 | `REDIS_URL` | api, worker | `redis://redis-host:6379/0` |
-| `JWT_SECRET` | api | strong random 32+ bytes; **rotate = all sessions die**, plan it |
+| `JWT_SECRET` | api | strong random **≥ 32 bytes (256 bits)** — weaker keys are refused at startup (`WeakKeyException`); **rotate = all sessions die**, plan it |
 | `PORT` | api | `8080` |
 | `APP_ENV` | api | `local` / `staging` / `production` — toggles CORS + log verbosity |
 | `AI_BASE_URL` | api | e.g. `https://openrouter.ai/api/v1` (any OpenAI-compatible host) |
@@ -61,23 +61,29 @@ Source of truth: `backend/.env.example`. Secrets live in the deployment secret s
 | `STRIPE_WEBHOOK_SECRET` | api | `whsec_…` per-endpoint secret |
 | `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_YEARLY` | api | Stripe Price IDs created in §6 |
 | `REVENUECAT_WEBHOOK_AUTH` | api | shared secret checked on RevenueCat webhook |
+| `YOUTUBE_API_KEY` | api, worker | YouTube Data API v3 key for the auto-curation sweep; unset = curated-only (public oEmbed covers availability checks) |
+| `RESEND_API_KEY` | api | Resend key for certificate email delivery; empty = logged no-op, never breaks a flow |
+| `RESEND_FROM` | api | sender, e.g. `Dera Skul <onboarding@resend.dev>` |
+| `SITE_URL` | api | public origin used for `/verify` certificate links in emails/PDFs and RSS — defaults to `https://deraskul.com` |
 | `WEB_ORIGIN` / `ADMIN_ORIGIN` | api | CORS allowlist, e.g. `https://deraskul.com` |
 | `ADMOB_APP_ID` | mobile | reserved (D6 — placeholder ads until network chosen) |
 | `SENTRY_DSN_*` | all clients | optional, Milestone 10 |
 
 Client build config (injected at **build time**, not runtime):
 - Mobile: `--dart-define=API_BASE_URL=…`, `ADMOB_APP_ID=…`
-- Web/admin: `VITE_API_BASE_URL=…`
+- Web/admin: `NEXT_PUBLIC_API_URL=…` (compose sets `http://api:8080`)
 
 ---
 
 ## 4. Backend Release Process
 
 The `api` and `worker` are **independent releases** (failure-isolation, TECHNICAL_DOC §2.1).
-One can ship without the other; neither takes the other down.
+One can ship without the other; neither takes the other down. Both run the **same image/JAR** —
+the worker differs only by `--spring.profiles.active=worker` (TECHNICAL_DOC §6.11).
 
 ```bash
-# 1. Build & push images (CI does this on tagged releases; manual fallback shown)
+# 1. Build & push images — manual step today: CI (.github/workflows/ci.yml) only gates
+#    quality (tests/lint/typecheck/builds + API smoke); it does not build or push images.
 docker build -t ghcr.io/profy256/profy-api:v1.4.0 backend/
 docker build -t ghcr.io/profy256/profy-worker:v1.4.0 backend/
 docker push ghcr.io/profy256/profy-api:v1.4.0
@@ -110,21 +116,27 @@ docker compose up -d ghcr.io/profy256/profy-api:v1.3.9   # previous tag
 
 ---
 
-## 5. Web & Admin Releases (static builds)
+## 5. Web & Admin Releases (Next.js standalone servers)
 
-Both are Vite static bundles served by Caddy, built in CI:
+Both are Next.js 16 apps built with `output: "standalone"` — they run as **Node servers**, not
+static bundles. `apps/web` has server-rendered dynamic routes (`/blog`, `/blog/[slug]`,
+`/verify/[code]`, plus `/rss.xml`, `/llms.txt`, `/sitemap.xml`, `/robots.txt`), so a pure static
+export is not possible. CI (`web` / `admin` jobs) only lints, typechecks and builds to gate PRs —
+it does **not** build or push images; image build/push is a manual step (§4).
 
 ```bash
-cd apps/web    && pnpm i && pnpm build   # → apps/web/dist
-cd apps/admin  && pnpm i && pnpm build   # → apps/admin/dist
-# rsync/scp dist/ to server webroot, then caddy reload (zero-downtime for static)
+cd apps/web    && npm ci && npm run build   # standalone Node server output
+cd apps/admin  && npm ci && npm run build
+# run the standalone server (or its container) behind Caddy — Caddy reverse-proxies to it
+# locally compose publishes web on 3002 → 3000 and admin on 3003 → 3000
 ```
 
 - Deploy web and admin **independently** — neither depends on the other's release.
-- SPA routing: Caddy `try_files {path} /index.html` per site block.
-- Cache rule: hashed assets `max-age=31536000, immutable`; `index.html` `no-cache`.
+- Caddy reverse-proxies to each Node server; Next.js handles routing (including dynamic routes),
+  so no SPA `try_files {path} /index.html` fallback is needed.
+- Cache rule: hashed assets `max-age=31536000, immutable`; HTML `no-cache`.
 - If a web release requires a new API endpoint, ship **api first** (endpoints are
-  additive per OpenAPI), then the web bundle.
+  additive per OpenAPI), then the web app.
 
 ---
 

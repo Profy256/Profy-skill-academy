@@ -135,3 +135,137 @@ export interface ApiResource {
 export async function fetchResources(): Promise<ApiResource[]> {
   return apiFetch("/api/v1/resources");
 }
+
+/* ── Certificates & course final test ───────────────────────────────────── */
+
+export interface FinalTestQuestion {
+  index: number;
+  question: string;
+  options: string[];
+}
+
+export interface CertificateInfo {
+  id: string;
+  code: string;
+  verifyUrl: string;
+  courseId: string | null;
+  courseSlug: string | null;
+  courseName: string;
+  definitionId: string | null;
+  definitionName: string;
+  recipientName: string | null;
+  score: number | null;
+  total: number | null;
+  passPercent: number;
+  issuedAt: string | null;
+  revokedAt: string | null;
+  identityVerifiedAt: string | null;
+  emailSentAt: string | null;
+  revoked: boolean;
+}
+
+export interface FinalTestState {
+  courseId: string;
+  courseSlug: string;
+  courseName: string;
+  progressPercent: number;
+  progressThresholdPercent: number;
+  attemptsUsed: number;
+  freeAttemptAvailable: boolean;
+  creditsAvailable: number;
+  readyToAttempt: boolean;
+  featureEnabled: boolean;
+  testTitle: string;
+  testInstructions: string;
+  passPercent: number;
+  pricing: {
+    stripeAmountCents: number;
+    stripeCurrency: string;
+    marzpayAmountUgx: number;
+    marzpayCurrency: string;
+  };
+  questions: FinalTestQuestion[];
+  certificate: CertificateInfo | null;
+  certificates: CertificateInfo[];
+  lessonCompleted: number;
+  lessonTotal: number;
+}
+
+export interface SubmitFinalTestResult {
+  score: number;
+  total: number;
+  percent: number;
+  passed: boolean;
+  attemptNumber: number;
+  freeAttempt: boolean;
+  creditsRemaining: number;
+  certificates: CertificateInfo[];
+}
+
+export interface CertCheckoutResult {
+  provider: "stripe" | "marzpay";
+  checkoutUrl?: string;
+  reference?: string;
+  status?: string;
+  amount?: number;
+  amountCents?: number;
+  currency?: string;
+}
+
+export function fetchFinalTestState(courseSlug: string): Promise<FinalTestState> {
+  return apiFetch(`/api/v1/courses/${encodeURIComponent(courseSlug)}/final-test`);
+}
+
+export function submitFinalTest(
+  courseSlug: string,
+  body: { answers: number[]; confirmName: boolean; recipientName?: string }
+): Promise<SubmitFinalTestResult> {
+  return apiFetch(`/api/v1/courses/${encodeURIComponent(courseSlug)}/final-test/attempts`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function checkoutCertTest(
+  provider: "stripe" | "marzpay",
+  body: { courseNodeId: string; successUrl?: string; cancelUrl?: string; phoneNumber?: string; country?: string }
+): Promise<CertCheckoutResult> {
+  return apiFetch(`/api/v1/billing/cert-test/checkout/${provider}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchCertCreditStatus(
+  provider: string,
+  reference: string
+): Promise<{ provider: string; reference: string; status: string }> {
+  return apiFetch(`/api/v1/billing/cert-test/status?provider=${encodeURIComponent(provider)}&reference=${encodeURIComponent(reference)}`);
+}
+
+export function fetchMyCertificates(): Promise<CertificateInfo[]> {
+  return apiFetch("/api/v1/certificates");
+}
+
+export interface CertificateDefinitionInfo {
+  id: string;
+  name: string;
+  slug: string;
+  shortName: string | null;
+  description: string | null;
+  badgeColor: string | null;
+  courseId: string | null;
+  courseSlug: string | null;
+  courseName: string | null;
+  requireFinalTest: boolean;
+  requireCourseComplete: boolean;
+  passPercent: number;
+  minProgressPercent: number;
+  autoIssue: boolean;
+  isEnabled: boolean;
+  issuedCount: number;
+}
+
+export function fetchCertificateDefinitions(): Promise<CertificateDefinitionInfo[]> {
+  return apiFetch("/api/v1/certificates/definitions");
+}

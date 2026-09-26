@@ -248,6 +248,58 @@ Check the **Review Queue** to manage auto-sourced videos.
 - **Remove** - Delete the video
 - **Set Primary** - Make it the main video for the lesson
 
+## 9. Certificates (sidebar → Certificates)
+
+One screen, four tabs. Everything here is editable **without a deploy** — the design, pricing and
+gates live in the `certificate_settings` row, and the per-course test lives on the course itself.
+
+### Design & Pricing
+| Field | What it controls | Default |
+|---|---|---|
+| Retake price (USD / UGX) | Cost of a retake credit (Stripe / MarzPay) | $2.00 / 7,500 UGX |
+| Free attempt threshold | % of the course's lessons a learner must complete **before** attempt #1 is free | 50% |
+| Pass mark | Score required to earn a certificate | 70% |
+| Test title + instructions | Shown on the Certificate tab (`{passPercent}` is replaced) | — |
+| Heading / intro / achieved / labels / signature / footer | The wording printed on the credential | — |
+| Colors, paper size, QR toggle | Credential look; **QR encodes the `/verify/{code}` URL** | — |
+| Enable certificates | Master switch — off = the test is hidden for everyone | on |
+
+The **live preview** on the right updates as you type. Save writes the settings (audited).
+
+### Final Tests
+Pick a course, add multiple-choice questions (2+ options), mark the correct option, set a pass %.
+The answer key is stored server-side and is **never** sent to the browser — grading happens in the API.
+A course with no questions simply shows "no test published" to learners.
+
+### Credentials
+Create named credentials ("Certificate of Completion", "Distinction", …): badge color, description,
+criteria (pass the final test / complete the course), pass %, minimum progress, auto-issue, and
+per-credential text overrides. Tie one to a course, or **manually award** a credential by learner
+email (catch-up grants for offline workshops).
+
+### Issued
+Every credential handed out — search, then **Revoke** (verification at `/verify/{code}` immediately
+reports `revoked`) or **Reinstate**.
+
+**Notes:** the PDF/PNG are rendered on demand from `/verify/{code}/pdf|/png`. Email delivery runs on a
+background thread and is skipped (logged) until `RESEND_API_KEY` is set — certificates still issue.
+
+---
+
+## 10. Blog Manager (sidebar → Blog Manager)
+
+Markdown posts with SEO fields; the website renders them at **`/blog`** (plus the sitemap, RSS feed
+and `llms.txt`).
+
+- **New post / Edit** — title, slug (auto-derived from the title, editable), excerpt, cover image URL,
+  comma-separated tags, **SEO title**, **SEO description**, and the Markdown body with a live preview.
+- **Publish / Unpublish** — only `published` posts are visible publicly; unpublishing returns a post to
+  `draft`. Archived posts stay in the list but never surface.
+- **Delete** — removes the post (permanent).
+
+Every write is audit-logged. Sanitising happens on render, so HTML pasted into Markdown cannot inject
+scripts into the site.
+
 ---
 
 ## Tips
@@ -263,6 +315,10 @@ Check the **Review Queue** to manage auto-sourced videos.
 5. **Use the Taxonomy Editor** - For precise control over the hierarchy
 
 6. **Check Review Queue** - Regularly review auto-sourced videos
+
+7. **Certificates** - Change pricing, pass mark or wording in Certificates → Design & Pricing (no deploy needed)
+
+8. **Blog** - Write posts in Blog Manager; they go live at /blog the moment you hit Publish
 
 ---
 

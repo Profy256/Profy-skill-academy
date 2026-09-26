@@ -1,4 +1,4 @@
-type View = "dashboard" | "taxonomy" | "lesson-editor" | "resources" | "review" | "campus-library" | "ai-assistant" | "ai-settings" | "quick-setup" | "quick-lesson";
+type View = "dashboard" | "taxonomy" | "lesson-editor" | "resources" | "review" | "campus-library" | "certificates" | "blog" | "ai-assistant" | "ai-settings" | "quick-setup" | "quick-lesson";
 
 interface Props {
   activeView: View;
@@ -79,6 +79,20 @@ const IconBolt = () => (
   </svg>
 );
 
+const IconAward = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <circle cx="7" cy="5" r="3.5" stroke="currentColor" strokeWidth="1" />
+    <path d="M5 8L4 13L7 11L10 13L9 8" stroke="currentColor" strokeWidth="1" fill="none" />
+  </svg>
+);
+
+const IconPen = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path d="M9.5 1.5L12.5 4.5L5 12H2V9L9.5 1.5Z" stroke="currentColor" strokeWidth="1" fill="none" />
+    <line x1="8" y1="3" x2="11" y2="6" stroke="currentColor" strokeWidth="1" />
+  </svg>
+);
+
 const contentTools = [
   { id: "dashboard" as View, label: "Quick Actions", Icon: IconHome },
   { id: "taxonomy" as View, label: "Taxonomy Manager", Icon: IconTree },
@@ -86,6 +100,8 @@ const contentTools = [
   { id: "resources" as View, label: "Resources", Icon: IconFile },
   { id: "review" as View, label: "Review Queue", Icon: IconShield },
   { id: "campus-library" as View, label: "Campus Library", Icon: IconBook },
+  { id: "certificates" as View, label: "Certificates", Icon: IconAward },
+  { id: "blog" as View, label: "Blog Manager", Icon: IconPen },
 ];
 
 const aiTools = [

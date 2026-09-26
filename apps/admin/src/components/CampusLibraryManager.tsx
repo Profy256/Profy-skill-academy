@@ -13,19 +13,26 @@ export default function CampusLibraryManager() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "free" | "premium">("all");
 
-  const fetchBooks = useCallback(async (p: number, q: string, f: string) => {
-    try {
-      setLoading(true);
-      const data: CampusBookListApi = await api.campusBooks.list({ page: p, limit: 20, search: q || undefined, filter: f });
-      setBooks(data.books);
-      setTotalPages(data.totalPages);
-      setTotal(data.total);
-    } catch (err) {
-      console.error("Failed to load campus books", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchBooks = useCallback(
+    (p: number, q: string, f: string) =>
+      Promise.resolve()
+        .then(() => {
+          setLoading(true);
+          return api.campusBooks.list({ page: p, limit: 20, search: q || undefined, filter: f });
+        })
+        .then((data: CampusBookListApi) => {
+          setBooks(data.books);
+          setTotalPages(data.totalPages);
+          setTotal(data.total);
+        })
+        .catch((err) => {
+          console.error("Failed to load campus books", err);
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
   useEffect(() => { fetchBooks(page, search, filter); }, [page, search, filter, fetchBooks]);
 

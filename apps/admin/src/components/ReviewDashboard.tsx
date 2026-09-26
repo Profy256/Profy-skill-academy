@@ -30,27 +30,38 @@ export default function ReviewDashboard() {
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const fetchQueue = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await api.lessons.reviewQueue();
-      setItems(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load review queue");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchQueue = useCallback(
+    () =>
+      Promise.resolve()
+        .then(() => {
+          setError(null);
+          return api.lessons.reviewQueue();
+        })
+        .then((data) => {
+          setItems(data);
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to load review queue");
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
-  const fetchUncovered = useCallback(async () => {
-    try {
-      const data = await api.lessons.uncoveredLessons();
-      setUncovered(data);
-      setUncoveredLoaded(true);
-    } catch (err) {
-      console.error("Failed to load coverage report", err);
-    }
-  }, []);
+  const fetchUncovered = useCallback(
+    () =>
+      api.lessons
+        .uncoveredLessons()
+        .then((data) => {
+          setUncovered(data);
+          setUncoveredLoaded(true);
+        })
+        .catch((err) => {
+          console.error("Failed to load coverage report", err);
+        }),
+    []
+  );
 
   useEffect(() => {
     fetchQueue();

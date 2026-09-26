@@ -1,0 +1,193 @@
+name: CI
+
+# Every check here must stay green — it is the merge gate for the monorepo:
+# backend unit tests, OpenAPI contract + generated client, both Next.js apps,
+# an API boot/seed smoke test, and the Flutter app.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Java 17 · Maven tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Unit tests
+        run: ./mvnw -B test
+
+  api-spec:
+    name: OpenAPI contract + generated client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lint the spec
+        run: npx @redocly/cli@latest lint backend/api/openapi.yaml
+      - name: Install client
+        run: npm ci
+        working-directory: packages/api-client
+      - name: Regenerate + typecheck client
+        run: |
+          npm run generate
+          npm run typecheck
+        working-directory: packages/api-client
+
+  web:
+    name: Consumer web (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - name: Lint (must be error-free)
+        run: npm run lint
+        working-directory: apps/web
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: apps/web
+      - name: Build
+        run: npm run build
+        working-directory: apps/web
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  admin:
+    name: Admin panel (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+      - run: npm ci
+        working-directory: apps/admin
+      - name: Lint (must be error-free)
+        run: npm run lint
+        working-directory: apps/admin
+      - name: Typecheck
+        run: npx tsc --noEmit
+        working-directory: apps/admin
+      - name: Build
+        run: npm run build
+        working-directory: apps/admin
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  api-smoke:
+    name: API boot · migrate · seed · smoke test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: profy
+          POSTGRES_PASSWORD: profy
+          POSTGRES_DB: profy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U profy -d profy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Boot, seed and assert
+        env:
+          DATABASE_URL: jdbc:postgresql://localhost:5432/profy
+          DATABASE_USERNAME: profy
+          DATABASE_PASSWORD: profy
+          REDIS_URL: redis://localhost:6379/0
+          SPRING_PROFILES_ACTIVE: local
+          JWT_SECRET: ci-only-insecure-secret-change-me
+          PORT: 8080
+        run: |
+          set -euo pipefail
+          nohup ./mvnw -B spring-boot:run > api.log 2>&1 &
+          echo "Waiting for the API to migrate and start…"
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then
+              echo "API up after ${i}s"; break
+            fi
+            if grep -q "APPLICATION FAILED TO START" api.log; then
+              echo "::error::API failed to start"; tail -100 api.log; exit 1
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:8080/healthz > /dev/null || { tail -100 api.log; exit 1; }
+
+          # Seed must be idempotent: run it twice and expect identical counts.
+          DATABASE_URL="postgres://profy:profy@localhost:5432/profy" ./scripts/seed.sh
+          DATABASE_URL="postgres://profy:profy@localhost:5432/profy" ./scripts/seed.sh
+
+          # Public API assertions.
+          categories=$(curl -sf "http://localhost:8080/api/v1/taxonomy/tree?phase=1" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['tree']; print(len(d))")
+          [ "$categories" -ge 3 ] || { echo "::error::expected ≥3 phase-1 categories, got $categories"; exit 1; }
+
+          lessons=$(curl -sf "http://localhost:8080/api/v1/courses/web-development-basics" \
+            | python3 -c "import json,sys; print(len(json.load(sys.stdin)['lessons']))")
+          [ "$lessons" -ge 3 ] || { echo "::error::expected ≥3 lessons, got $lessons"; exit 1; }
+
+          video=$(curl -sf "http://localhost:8080/api/v1/lessons/html-first-page" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['primaryVideo']['youtubeVideoId'])")
+          [ -n "$video" ] || { echo "::error::seeded lesson has no primary video"; exit 1; }
+
+          curl -sf "http://localhost:8080/api/v1/blog" > /dev/null
+          code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/api/v1/verify/NOSUCHCODE")
+          [ "$code" = "404" ] || { echo "::error::expected 404 for unknown verify code, got $code"; exit 1; }
+
+          echo "API smoke test passed."
+
+  mobile:
+    name: Mobile (Flutter analyze + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Pub get
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Tests
+        run: flutter test

@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api, type TaxonomyApiNode } from "@/lib/api";
+import {
+  api,
+  type TaxonomyApiNode,
+  type ImportYouTubeResponse,
+  type ImportUrlResponse,
+  type ImportFileResponse,
+} from "@/lib/api";
 
 interface QuickLessonProps {
   onDone: () => void;
@@ -9,6 +15,7 @@ interface QuickLessonProps {
 
 type Mode = "youtube" | "url" | "file";
 type Status = "idle" | "loading" | "success" | "error";
+type ImportResult = ImportYouTubeResponse | ImportUrlResponse | ImportFileResponse;
 
 export default function QuickLesson({ onDone }: QuickLessonProps) {
   const [mode, setMode] = useState<Mode>("youtube");
@@ -17,7 +24,7 @@ export default function QuickLesson({ onDone }: QuickLessonProps) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
 
   // YouTube state
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -29,25 +36,32 @@ export default function QuickLesson({ onDone }: QuickLessonProps) {
   const [file, setFile] = useState<File | null>(null);
   const [lessonCount, setLessonCount] = useState(3);
 
-  const fetchCourses = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await api.taxonomy.list();
-      const courseNodes: TaxonomyApiNode[] = [];
-      const extractCourses = (nodes: TaxonomyApiNode[]) => {
-        for (const n of nodes) {
-          if (n.nodeType === "course") courseNodes.push(n);
-          if (n.children) extractCourses(n.children);
-        }
-      };
-      extractCourses(data);
-      setCourses(courseNodes);
-    } catch (err) {
-      console.error("Failed to load courses", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchCourses = useCallback(
+    () =>
+      Promise.resolve()
+        .then(() => {
+          setLoading(true);
+          return api.taxonomy.list();
+        })
+        .then((data) => {
+          const courseNodes: TaxonomyApiNode[] = [];
+          const extractCourses = (nodes: TaxonomyApiNode[]) => {
+            for (const n of nodes) {
+              if (n.nodeType === "course") courseNodes.push(n);
+              if (n.children) extractCourses(n.children);
+            }
+          };
+          extractCourses(data);
+          setCourses(courseNodes);
+        })
+        .catch((err) => {
+          console.error("Failed to load courses", err);
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
   useEffect(() => {
     fetchCourses();
@@ -115,6 +129,10 @@ export default function QuickLesson({ onDone }: QuickLessonProps) {
       setMode("file");
     }
   };
+
+  const resultTitle = result && "title" in result ? result.title : undefined;
+  const resultMessage = result && "message" in result ? result.message : undefined;
+  const resultLessons = result && "lessons" in result ? result.lessons : undefined;
 
   const inputStyle = {
     border: "1px solid var(--border)",
@@ -201,10 +219,10 @@ export default function QuickLesson({ onDone }: QuickLessonProps) {
                 ✓
               </div>
               <div className="font-mono text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
-                {mode === "file" ? `${result?.lessons?.length || 0} lessons created!` : "Lesson created!"}
+                {mode === "file" ? `${resultLessons?.length || 0} lessons created!` : "Lesson created!"}
               </div>
               <div className="text-sm mb-4" style={{ color: "var(--text-2)" }}>
-                {result?.title || result?.message}
+                {resultTitle || resultMessage}
               </div>
               <div className="flex gap-2 justify-center">
                 <button
@@ -229,7 +247,7 @@ export default function QuickLesson({ onDone }: QuickLessonProps) {
                 IMPORT FROM YOUTUBE
               </div>
               <p className="text-sm" style={{ color: "var(--text-3)" }}>
-                Paste a YouTube URL and we'll create a lesson with the video attached.
+                Paste a YouTube URL and we&apos;ll create a lesson with the video attached.
               </p>
               <input
                 value={youtubeUrl}

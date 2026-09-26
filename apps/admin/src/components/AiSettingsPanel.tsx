@@ -25,6 +25,7 @@ export default function AiSettingsPanel() {
   const [keys, setKeys] = useState<AiProviderKeyApi[]>([]);
   const [keyForm, setKeyForm] = useState({ apiKey: "", label: "" });
   const [savingKey, setSavingKey] = useState(false);
+  const [now] = useState(() => Date.now());
 
   const [form, setForm] = useState({
     name: "",
@@ -34,32 +35,39 @@ export default function AiSettingsPanel() {
     defaultModel: "gpt-4o-mini",
   });
 
-  const fetchAll = useCallback(async () => {
-    try {
-      const [p, s] = await Promise.all([api.aiProviders.list(), api.aiProviders.getSettings()]);
-      setProviders(p);
-      setSettings(s);
-    } catch (err) {
-      console.error("Failed to load AI settings", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchAll = useCallback(
+    () =>
+      Promise.all([api.aiProviders.list(), api.aiProviders.getSettings()])
+        .then(([p, s]) => {
+          setProviders(p);
+          setSettings(s);
+        })
+        .catch((err) => {
+          console.error("Failed to load AI settings", err);
+        })
+        .finally(() => {
+          setLoading(false);
+        }),
+    []
+  );
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const fetchKeys = useCallback(async (providerId: string) => {
-    try {
-      setKeys(await api.aiProviders.keys(providerId));
-    } catch (err) {
-      console.error("Failed to load API keys", err);
-      setKeys([]);
+  const fetchKeys = useCallback((providerId: string | null) => {
+    if (!providerId) {
+      return Promise.resolve().then(() => setKeys([]));
     }
+    return api.aiProviders
+      .keys(providerId)
+      .then((data) => setKeys(data))
+      .catch((err) => {
+        console.error("Failed to load API keys", err);
+        setKeys([]);
+      });
   }, []);
 
   useEffect(() => {
-    if (editingId) fetchKeys(editingId);
-    else setKeys([]);
+    fetchKeys(editingId);
   }, [editingId, fetchKeys]);
 
   const handleAddKey = async () => {
@@ -371,7 +379,7 @@ export default function AiSettingsPanel() {
                 ) : (
                   <div className="space-y-2 mb-4">
                     {keys.map((k) => {
-                      const cooling = k.disabledUntil && new Date(k.disabledUntil).getTime() > Date.now();
+                      const cooling = k.disabledUntil && new Date(k.disabledUntil).getTime() > now;
                       return (
                         <div key={k.id} className="flex items-center gap-3 px-3 py-2" style={{ border: "1px solid var(--border)", borderRadius: "3px", background: "var(--panel-2)" }}>
                           <span className="font-mono text-xs" style={{ color: "var(--text-2)" }}>

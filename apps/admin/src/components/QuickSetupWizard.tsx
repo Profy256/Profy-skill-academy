@@ -18,7 +18,7 @@ export default function QuickSetupWizard({ onDone }: QuickSetupWizardProps) {
   const [courses, setCourses] = useState<Record<number, string[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<{ category: string; subcategories: number; courses: number } | null>(null);
 
   const addSubcategory = () => {
     setSubcategories([...subcategories, ""]);
@@ -322,9 +322,9 @@ export default function QuickSetupWizard({ onDone }: QuickSetupWizardProps) {
               Created Successfully!
             </div>
             <div className="text-sm" style={{ color: "var(--text-2)" }}>
-              <div><strong>{result.category}</strong></div>
-              <div>{result.subcategories} subcategories</div>
-              <div>{result.courses} courses</div>
+              <div><strong>{result?.category}</strong></div>
+              <div>{result?.subcategories} subcategories</div>
+              <div>{result?.courses} courses</div>
             </div>
             <button
               onClick={onDone}

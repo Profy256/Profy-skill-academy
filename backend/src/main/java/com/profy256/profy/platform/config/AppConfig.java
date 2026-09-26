@@ -38,6 +38,13 @@ public class AppConfig {
     // AI encryption key for DB-stored API keys (AES-256, base64-encoded)
     private String aiEncryptionKey = "";
 
+    // Email (Resend)
+    private String resendApiKey = "";
+    private String resendFrom = "Dera Skul <onboarding@resend.dev>";
+
+    // Public site origin — used to build certificate verify URLs
+    private String siteUrl = "https://deraskul.com";
+
     // Other
     private String youtubeApiKey = "";
     private String corsAllowedOrigins = "";
@@ -97,6 +104,15 @@ public class AppConfig {
 
     public String getAiEncryptionKey() { return aiEncryptionKey; }
     public void setAiEncryptionKey(String aiEncryptionKey) { this.aiEncryptionKey = aiEncryptionKey; }
+
+    public String getResendApiKey() { return resendApiKey; }
+    public void setResendApiKey(String resendApiKey) { this.resendApiKey = resendApiKey; }
+
+    public String getResendFrom() { return resendFrom; }
+    public void setResendFrom(String resendFrom) { this.resendFrom = resendFrom; }
+
+    public String getSiteUrl() { return siteUrl; }
+    public void setSiteUrl(String siteUrl) { this.siteUrl = siteUrl; }
 
     public String getYoutubeApiKey() { return youtubeApiKey; }
     public void setYoutubeApiKey(String youtubeApiKey) { this.youtubeApiKey = youtubeApiKey; }

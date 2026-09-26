@@ -8,6 +8,8 @@ import LessonEditor from "@/components/LessonEditor";
 import ResourcesManager from "@/components/ResourcesManager";
 import ReviewDashboard from "@/components/ReviewDashboard";
 import CampusLibraryManager from "@/components/CampusLibraryManager";
+import CertificateStudio from "@/components/CertificateStudio";
+import BlogManager from "@/components/BlogManager";
 import AiAssistant from "@/components/AiAssistant";
 import AiSettingsPanel from "@/components/AiSettingsPanel";
 import QuickSetupWizard from "@/components/QuickSetupWizard";
@@ -15,17 +17,11 @@ import QuickLesson from "@/components/QuickLesson";
 import ThemeToggle from "@/components/ThemeToggle";
 import { getToken, clearSession, api, type AutoCurationSettingsApi } from "@/lib/api";
 
-type View = "dashboard" | "taxonomy" | "lesson-editor" | "resources" | "review" | "campus-library" | "ai-assistant" | "ai-settings" | "quick-setup" | "quick-lesson";
+type View = "dashboard" | "taxonomy" | "lesson-editor" | "resources" | "review" | "campus-library" | "certificates" | "blog" | "ai-assistant" | "ai-settings" | "quick-setup" | "quick-lesson";
 
 export default function App() {
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState(() => typeof window !== "undefined" && !!getToken());
   const [view, setView] = useState<View>("dashboard");
-
-  useEffect(() => {
-    if (getToken()) {
-      setAuthed(true);
-    }
-  }, []);
 
   const handleLogout = async () => {
     await api.auth.logout();
@@ -54,6 +50,8 @@ export default function App() {
               {view === "resources" && "Resources"}
               {view === "review" && "Review Queue"}
               {view === "campus-library" && "Campus Library"}
+              {view === "certificates" && "Certificates"}
+              {view === "blog" && "Blog Manager"}
               {view === "ai-assistant" && "AI Assistant"}
               {view === "ai-settings" && "AI Provider Settings"}
               {view === "quick-setup" && "Quick Setup Wizard"}
@@ -83,6 +81,8 @@ export default function App() {
           {view === "resources" && <ResourcesManager />}
           {view === "review" && <ReviewDashboard />}
           {view === "campus-library" && <CampusLibraryManager />}
+          {view === "certificates" && <CertificateStudio />}
+          {view === "blog" && <BlogManager />}
           {view === "ai-assistant" && <AiAssistant />}
           {view === "ai-settings" && <AiSettingsPanel />}
           {view === "quick-setup" && <QuickSetupWizard onDone={() => setView("taxonomy")} />}

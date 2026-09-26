@@ -40,6 +40,10 @@ tags:
     description: Administrator authentication
   - name: admin
     description: Curator CRUD + review dashboard
+  - name: certificates
+    description: Final tests, credentials and public verification
+  - name: blog
+    description: Public Markdown blog (admin-authored)
 
 paths:
   /healthz:
@@ -1206,6 +1210,697 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  # ---------------------------------------------------------------- certificates
+  /api/v1/courses/{slug}/final-test:
+    get:
+      tags: [certificates]
+      summary: Final-test state for a course (eligibility, pricing, questions)
+      description: |
+        Returns everything the Certificate tab needs. `questions` never carries
+        `answerIndex` — the answer key stays on the server. `readyToAttempt` is
+        true only when the learner holds their free attempt (progress >= threshold,
+        no prior attempt) or an unused paid credit.
+      operationId: getFinalTestState
+      security:
+        - consumerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CourseSlug"
+      responses:
+        "200":
+          description: Current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinalTestState"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/courses/{slug}/final-test/attempts:
+    post:
+      tags: [certificates]
+      summary: Submit answers — graded server-side
+      description: |
+        Attempt #1 is free when progress >= `freeAttemptProgressPercent`; any
+        later attempt consumes an unused credit, otherwise the API answers
+        `402 payment_required`. Passing (>= pass percent) with `confirmName`
+        issues the credential(s).
+      operationId: submitFinalTest
+      security:
+        - consumerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CourseSlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitFinalTestRequest"
+      responses:
+        "200":
+          description: Graded result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitFinalTestResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/PaymentRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/billing/cert-test/checkout/stripe:
+    post:
+      tags: [certificates, billing]
+      summary: Buy a retake credit with Stripe (one-off, amount from settings)
+      operationId: certTestCheckoutStripe
+      security:
+        - consumerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertCheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertCheckoutResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/billing/cert-test/checkout/marzpay:
+    post:
+      tags: [certificates, billing]
+      summary: Buy a retake credit with MarzPay (mobile money, amount from settings)
+      operationId: certTestCheckoutMarzPay
+      security:
+        - consumerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertCheckoutRequest"
+      responses:
+        "200":
+          description: Collection reference (poll `/billing/cert-test/status`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertCheckoutResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/billing/cert-test/status:
+    get:
+      tags: [certificates, billing]
+      summary: Confirm a credit purchase without waiting for a webhook
+      operationId: certTestCreditStatus
+      security:
+        - consumerAuth: []
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [stripe, marzpay]
+        - name: reference
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Credit status (`pending` | `unused` | `consumed` | `failed`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertCreditStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/certificates:
+    get:
+      tags: [certificates]
+      summary: Credentials earned by the signed-in learner
+      operationId: listMyCertificates
+      security:
+        - consumerAuth: []
+      responses:
+        "200":
+          description: Certificates, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Certificate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/certificates/definitions:
+    get:
+      tags: [certificates]
+      summary: Credential catalogue (public, for the course certificate tab)
+      operationId: listCertificateDefinitions
+      security: []
+      responses:
+        "200":
+          description: Enabled definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CertificateDefinition"
+
+  /api/v1/verify/{code}:
+    get:
+      tags: [certificates]
+      summary: Publicly verify a credential by its code (no auth)
+      description: Powers `/verify/{code}` — SSR'd for SEO/GEO so AI crawlers can attribute the credential.
+      operationId: verifyCertificate
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CertCode"
+      responses:
+        "200":
+          description: Verification result (valid / revoked / holder)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateVerifyResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/verify/{code}/pdf:
+    get:
+      tags: [certificates]
+      summary: Download the credential as PDF (no auth)
+      operationId: certificatePdf
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CertCode"
+      responses:
+        "200":
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/verify/{code}/png:
+    get:
+      tags: [certificates]
+      summary: Download the credential as PNG (no auth, 150 DPI)
+      operationId: certificatePng
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/CertCode"
+      responses:
+        "200":
+          description: PNG image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ------------------------------------------------------------------- blog
+  /api/v1/blog:
+    get:
+      tags: [blog]
+      summary: Published posts (paginated, optional tag filter)
+      operationId: listBlogPosts
+      security: []
+      parameters:
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/PageNumber"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Page of post summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPage"
+
+  /api/v1/blog/{slug}:
+    get:
+      tags: [blog]
+      summary: A published post (Markdown + SEO fields)
+      operationId: getBlogPost
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PostSlug"
+      responses:
+        "200":
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPostDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/blog:
+    get:
+      tags: [admin]
+      summary: List posts (drafts included), newest update first
+      operationId: adminListBlogPosts
+      security:
+        - adminAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, draft, published, archived]
+        - $ref: "#/components/parameters/PageNumber"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Page of posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBlogPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not an admin
+    post:
+      tags: [admin]
+      summary: Create a post (slug derived from the title when omitted)
+      operationId: adminCreateBlogPost
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogPostInput"
+      responses:
+        "200":
+          description: Created post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBlogPost"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Slug already in use
+
+  /api/v1/admin/blog/{id}:
+    get:
+      tags: [admin]
+      summary: Read a post for editing
+      operationId: adminGetBlogPost
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBlogPost"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [admin]
+      summary: Update a post
+      operationId: adminUpdateBlogPost
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlogPostInput"
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBlogPost"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Slug already in use
+    delete:
+      tags: [admin]
+      summary: Delete a post
+      operationId: adminDeleteBlogPost
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "200":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/blog/{id}/status:
+    post:
+      tags: [admin]
+      summary: Publish / unpublish / archive
+      operationId: adminSetBlogPostStatus
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, published, archived]
+      responses:
+        "200":
+          description: Updated post
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBlogPost"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ------------------------------------------------- admin certificates studio
+  /api/v1/admin/certificates/settings:
+    get:
+      tags: [admin, certificates]
+      summary: Certificate Studio settings (pricing + template)
+      operationId: getCertificateSettings
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [admin, certificates]
+      summary: Save pricing, wording and colours
+      operationId: updateCertificateSettings
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateSettingsInput"
+      responses:
+        "200":
+          description: Saved settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateSettings"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/certificates/definitions:
+    get:
+      tags: [admin, certificates]
+      summary: All credential definitions (including disabled)
+      operationId: adminListCertificateDefinitions
+      security:
+        - adminAuth: []
+      responses:
+        "200":
+          description: Definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CertificateDefinition"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [admin, certificates]
+      summary: Create a credential definition
+      operationId: adminCreateCertificateDefinition
+      security:
+        - adminAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateDefinitionInput"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateDefinition"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          description: Slug already in use
+
+  /api/v1/admin/certificates/definitions/{id}:
+    put:
+      tags: [admin, certificates]
+      summary: Update a credential definition
+      operationId: adminUpdateCertificateDefinition
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DefinitionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateDefinitionInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateDefinition"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [admin, certificates]
+      summary: Delete a credential definition (issued rows keep working)
+      operationId: adminDeleteCertificateDefinition
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DefinitionId"
+      responses:
+        "200":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/certificates/definitions/{id}/issue:
+    post:
+      tags: [admin, certificates]
+      summary: Manually award a credential to a learner by email
+      operationId: adminIssueCertificate
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DefinitionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userEmail]
+              properties:
+                userEmail:
+                  type: string
+                  format: email
+                recipientName:
+                  type: string
+      responses:
+        "200":
+          description: Issued credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Certificate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown user or definition
+
+  /api/v1/admin/certificates/issued:
+    get:
+      tags: [admin, certificates]
+      summary: Issued credentials (paginated, optional status filter)
+      operationId: adminListIssuedCertificates
+      security:
+        - adminAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, all]
+        - $ref: "#/components/parameters/PageNumber"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Page of issued credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuedCertificatePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/admin/certificates/issued/{id}/revoke:
+    post:
+      tags: [admin, certificates]
+      summary: Revoke a credential (verification page shows it as revoked)
+      operationId: adminRevokeCertificate
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CertificateId"
+      responses:
+        "200":
+          description: Revoked credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuedCertificate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/certificates/issued/{id}/reinstate:
+    post:
+      tags: [admin, certificates]
+      summary: Reinstate a revoked credential
+      operationId: adminReinstateCertificate
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CertificateId"
+      responses:
+        "200":
+          description: Reinstateed credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IssuedCertificate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/admin/certificates/final-tests/{courseId}:
+    get:
+      tags: [admin, certificates]
+      summary: Read the authored final test of a course (answer key included)
+      operationId: getCourseFinalTest
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      responses:
+        "200":
+          description: Test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinalTestAuthoring"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [admin, certificates]
+      summary: Save the course final test (validates every question)
+      operationId: saveCourseFinalTest
+      security:
+        - adminAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CourseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinalTestAuthoringInput"
+      responses:
+        "200":
+          description: Saved test
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinalTestAuthoring"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+
 components:
   securitySchemes:
     consumerAuth:
@@ -1218,6 +1913,72 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Admin JWT with audience `admin` (15 min). Never interchangeable with consumer tokens.
+
+  parameters:
+    CourseSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+    CourseId:
+      name: courseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CertCode:
+      name: code
+      in: path
+      required: true
+      description: Uppercase, ambiguity-free credential code
+      schema:
+        type: string
+    DefinitionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PostSlug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+    CertificateId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PostId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PageNumber:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    PageSize:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 12
 
   responses:
     Unauthorized:
@@ -1246,6 +2007,12 @@ components:
             $ref: "#/components/schemas/Error"
     AIUnavailable:
       description: "AI Teacher degraded - lesson content stays fully usable"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    PaymentRequired:
+      description: "Paid attempt required (free attempt already used, or progress below threshold)"
       content:
         application/json:
           schema:
@@ -1991,30 +2758,6 @@ components:
         notes:
           type: string
 
-    VideoInput:
-      type: object
-      properties:
-        youtube_url:
-          type: string
-          description: Full YouTube URL; the ID is extracted and validated server-side.
-        youtube_video_id:
-          type: string
-          pattern: "^[A-Za-z0-9_-]{11}$"
-        title:
-          type: string
-        channel:
-          type: string
-        is_primary:
-          type: boolean
-        curator_status:
-          type: string
-          enum: [pending, approved, flagged, unavailable]
-        date_reviewed:
-          type: [string, "null"]
-          format: date
-        notes:
-          type: string
-
     AutoCurationSettings:
       type: object
       description: Runtime state of automatic video curation.
@@ -2043,9 +2786,8 @@ components:
           type: string
           description: Name of the parent course (taxonomy node).
         created_at:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
 
     VideoCandidate:
       type: object
@@ -2072,34 +2814,6 @@ components:
             `auto` = auto-sourced fallback from YouTube Data API search for lessons
             without a curated video. One auto video per lesson; created with
             `curator_status=pending` and a nullable `added_by`.
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        lesson_id:
-          type: string
-          format: uuid
-        youtube_video_id:
-          type: string
-        title:
-          type: string
-        channel:
-          type: [string, "null"]
-        is_primary:
-          type: boolean
-        curator_status:
-          type: string
-          enum: [pending, approved, flagged, unavailable]
-        date_reviewed:
-          type: [string, "null"]
-          format: date
-        notes:
-          type: [string, "null"]
-        added_by:
-          type: string
-          format: uuid
-
     ReviewVideoItem:
       type: object
       properties:
@@ -2162,3 +2876,689 @@ components:
             $ref: "#/components/schemas/AuditLogEntry"
         next_cursor:
           type: [string, "null"]
+
+    # -------------------------------------------------------- certificates
+    FinalTestState:
+      type: object
+      properties:
+        courseId:
+          type: string
+          format: uuid
+        courseSlug:
+          type: string
+        courseName:
+          type: string
+        progressPercent:
+          type: integer
+        progressThresholdPercent:
+          type: integer
+          description: Progress required for the free attempt (admin-editable, default 50)
+        attemptsUsed:
+          type: integer
+        freeAttemptAvailable:
+          type: boolean
+        creditsAvailable:
+          type: integer
+          description: Unused paid retake credits held for this course
+        readyToAttempt:
+          type: boolean
+        featureEnabled:
+          type: boolean
+          description: Certificates globally switched on by an admin
+        testTitle:
+          type: string
+        testInstructions:
+          type: string
+        passPercent:
+          type: integer
+        pricing:
+          $ref: "#/components/schemas/CertPricing"
+        questions:
+          type: array
+          description: Question + options only; `answerIndex` never leaves the server
+          items:
+            $ref: "#/components/schemas/FinalTestQuestion"
+        certificate:
+          oneOf:
+            - $ref: "#/components/schemas/Certificate"
+            - type: "null"
+        certificates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Certificate"
+        lessonCompleted:
+          type: integer
+        lessonTotal:
+          type: integer
+
+    CertPricing:
+      type: object
+      properties:
+        stripeAmountCents:
+          type: integer
+        stripeCurrency:
+          type: string
+          examples: [usd]
+        marzpayAmountUgx:
+          type: integer
+        marzpayCurrency:
+          type: string
+          examples: [UGX]
+
+    FinalTestQuestion:
+      type: object
+      properties:
+        index:
+          type: integer
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+
+    SubmitFinalTestRequest:
+      type: object
+      required: [answers, confirmName]
+      properties:
+        answers:
+          type: array
+          items:
+            type: integer
+        confirmName:
+          type: boolean
+          description: Learner confirms the name printed on the certificate
+        recipientName:
+          type: string
+          description: Optional printed-name override
+
+    SubmitFinalTestResponse:
+      type: object
+      properties:
+        score:
+          type: integer
+        total:
+          type: integer
+        percent:
+          type: integer
+        passed:
+          type: boolean
+        attemptNumber:
+          type: integer
+        freeAttempt:
+          type: boolean
+        creditsRemaining:
+          type: integer
+        certificates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Certificate"
+
+    Certificate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        verifyUrl:
+          type: string
+        courseId:
+          type: string
+          format: uuid
+        courseSlug:
+          type: string
+        courseName:
+          type: string
+        definitionId:
+          type: [string, "null"]
+          format: uuid
+        definitionName:
+          type: string
+        recipientName:
+          type: string
+        score:
+          type: [integer, "null"]
+        total:
+          type: [integer, "null"]
+        passPercent:
+          type: integer
+        issuedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: [string, "null"]
+          format: date-time
+        identityVerifiedAt:
+          type: [string, "null"]
+          format: date-time
+        emailSentAt:
+          type: [string, "null"]
+          format: date-time
+        revoked:
+          type: boolean
+
+    CertificateDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        shortName:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        badgeColor:
+          type: [string, "null"]
+        courseId:
+          type: [string, "null"]
+          format: uuid
+        courseSlug:
+          type: [string, "null"]
+        courseName:
+          type: [string, "null"]
+        requireFinalTest:
+          type: boolean
+        requireCourseComplete:
+          type: boolean
+        passPercent:
+          type: integer
+        minProgressPercent:
+          type: integer
+        autoIssue:
+          type: boolean
+        certHeadingOverride:
+          type: [string, "null"]
+        certIntroOverride:
+          type: [string, "null"]
+        certAchievedOverride:
+          type: [string, "null"]
+        accentColorOverride:
+          type: [string, "null"]
+        isEnabled:
+          type: boolean
+        sortOrder:
+          type: integer
+        issuedCount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CertificateDefinitionInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        shortName:
+          type: string
+        description:
+          type: string
+        badgeColor:
+          type: string
+        courseNodeId:
+          type: [string, "null"]
+          format: uuid
+        requireFinalTest:
+          type: boolean
+        requireCourseComplete:
+          type: boolean
+        passPercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        minProgressPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        autoIssue:
+          type: boolean
+        certHeadingOverride:
+          type: [string, "null"]
+        certIntroOverride:
+          type: [string, "null"]
+        certAchievedOverride:
+          type: [string, "null"]
+        accentColorOverride:
+          type: [string, "null"]
+        isEnabled:
+          type: boolean
+        sortOrder:
+          type: integer
+
+    IssuedCertificate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        verifyUrl:
+          type: string
+        recipientName:
+          type: string
+        userEmail:
+          type: [string, "null"]
+        courseName:
+          type: string
+        definitionName:
+          type: string
+        score:
+          type: [integer, "null"]
+        total:
+          type: [integer, "null"]
+        passPercent:
+          type: integer
+        issuedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: [string, "null"]
+          format: date-time
+        emailError:
+          type: [string, "null"]
+        revoked:
+          type: boolean
+
+    IssuedCertificatePage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssuedCertificate"
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer
+
+    CertificateVerifyResult:
+      type: object
+      properties:
+        code:
+          type: string
+        valid:
+          type: boolean
+        revoked:
+          type: boolean
+        recipientName:
+          type: string
+        courseName:
+          type: string
+        definitionName:
+          type: string
+        badgeColor:
+          type: string
+        score:
+          type: [integer, "null"]
+        total:
+          type: [integer, "null"]
+        passPercent:
+          type: integer
+        issuedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: [string, "null"]
+          format: date-time
+        courseSlug:
+          type: [string, "null"]
+        organization:
+          type: string
+        holderEmailHint:
+          type: [string, "null"]
+          description: Masked holder email, e.g. `jo***@gmail.com`
+
+    CertCheckoutRequest:
+      type: object
+      required: [courseNodeId]
+      properties:
+        courseNodeId:
+          type: string
+          format: uuid
+        successUrl:
+          type: string
+        cancelUrl:
+          type: string
+        phoneNumber:
+          type: string
+          description: Required for MarzPay
+        country:
+          type: string
+          examples: [UG]
+
+    CertCheckoutResponse:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [stripe, marzpay]
+        checkoutUrl:
+          type: string
+          description: Stripe hosted checkout URL
+        reference:
+          type: string
+          description: MarzPay collection reference
+        status:
+          type: string
+        amount:
+          type: integer
+        amountCents:
+          type: integer
+        currency:
+          type: string
+
+    CertCreditStatus:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [stripe, marzpay]
+        reference:
+          type: string
+        status:
+          type: string
+          enum: [pending, unused, consumed, failed]
+
+    CertificateSettings:
+      type: object
+      properties:
+        testPriceCents:
+          type: integer
+          description: Stripe price for one retake credit (USD cents)
+        testPriceUgx:
+          type: integer
+          description: MarzPay price for one retake credit (UGX)
+        freeAttemptProgressPercent:
+          type: integer
+        defaultPassPercent:
+          type: integer
+        testTitle:
+          type: string
+        testInstructions:
+          type: string
+        certHeading:
+          type: string
+        certIntro:
+          type: string
+        certAchieved:
+          type: string
+        certCourseLabel:
+          type: string
+        certScoreLabel:
+          type: string
+        certDateLabel:
+          type: string
+        certCodeLabel:
+          type: string
+        certSignatureName:
+          type: string
+        certSignatureTitle:
+          type: string
+        certFooter:
+          type: string
+        certOrgName:
+          type: string
+        certPrimaryColor:
+          type: string
+          examples: ["#1f3a8a"]
+        certAccentColor:
+          type: string
+          examples: ["#c9a227"]
+        certPaperSize:
+          type: string
+          enum: [landscape, portrait]
+        certShowQr:
+          type: boolean
+        certEnabled:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+
+    CertificateSettingsInput:
+      type: object
+      description: Every field optional — omitted fields keep their current value
+      properties:
+        testPriceCents:
+          type: integer
+        testPriceUgx:
+          type: integer
+        freeAttemptProgressPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        defaultPassPercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        testTitle:
+          type: string
+        testInstructions:
+          type: string
+        certHeading:
+          type: string
+        certIntro:
+          type: string
+        certAchieved:
+          type: string
+        certCourseLabel:
+          type: string
+        certScoreLabel:
+          type: string
+        certDateLabel:
+          type: string
+        certCodeLabel:
+          type: string
+        certSignatureName:
+          type: string
+        certSignatureTitle:
+          type: string
+        certFooter:
+          type: string
+        certOrgName:
+          type: string
+        certPrimaryColor:
+          type: string
+        certAccentColor:
+          type: string
+        certPaperSize:
+          type: string
+          enum: [landscape, portrait]
+        certShowQr:
+          type: boolean
+        certEnabled:
+          type: boolean
+
+    FinalTestAuthoring:
+      type: object
+      properties:
+        courseId:
+          type: string
+          format: uuid
+        courseSlug:
+          type: string
+        passPercent:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinalTestAuthoringQuestion"
+
+    FinalTestAuthoringQuestion:
+      type: object
+      description: Includes `answerIndex` — admin only, stripped for learners
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        answerIndex:
+          type: integer
+
+    FinalTestAuthoringInput:
+      type: object
+      required: [questions]
+      properties:
+        questions:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/FinalTestAuthoringQuestion"
+        passPercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    # ---------------------------------------------------------------- blog
+    BlogPostSummary:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type: [string, "null"]
+        coverImageUrl:
+          type: [string, "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        readingTime:
+          type: string
+          examples: ["4 min read"]
+        publishedAt:
+          type: [string, "null"]
+          format: date-time
+        authorName:
+          type: [string, "null"]
+
+    BlogPostDetail:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type: [string, "null"]
+        contentMd:
+          type: string
+          description: Raw Markdown — rendered and sanitised by the web app
+        coverImageUrl:
+          type: [string, "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        metaTitle:
+          type: [string, "null"]
+        metaDescription:
+          type: [string, "null"]
+        readingTime:
+          type: string
+        publishedAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        authorName:
+          type: [string, "null"]
+
+    AdminBlogPost:
+      allOf:
+        - $ref: "#/components/schemas/BlogPostDetail"
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [draft, published, archived]
+            createdAt:
+              type: string
+              format: date-time
+
+    BlogPostInput:
+      type: object
+      required: [title]
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type: string
+        contentMd:
+          type: string
+        coverImageUrl:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        metaTitle:
+          type: string
+        metaDescription:
+          type: string
+        status:
+          type: string
+          enum: [draft, published, archived]
+
+    BlogPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlogPostSummary"
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer
+
+    AdminBlogPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminBlogPost"
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer

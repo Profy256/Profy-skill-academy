@@ -7,10 +7,11 @@ import com.profy256.profy.modules.progress.entity.Bookmark;
 import com.profy256.profy.modules.progress.entity.LessonProgress;
 import com.profy256.profy.modules.progress.entity.QuizAttempt;
 import com.profy256.profy.modules.progress.repository.BookmarkRepository;
-import com.profy256.profy.modules.progress.repository.CertificateRepository;
 import com.profy256.profy.modules.progress.repository.LessonProgressRepository;
 import com.profy256.profy.modules.progress.repository.QuizAttemptRepository;
+import com.profy256.profy.modules.progress.event.CourseProgressUpdatedEvent;
 import com.profy256.profy.modules.taxonomy.entity.TaxonomyNode;
+import org.springframework.context.ApplicationEventPublisher;
 import com.profy256.profy.modules.taxonomy.repository.TaxonomyNodeRepository;
 import com.profy256.profy.platform.error.BadRequestException;
 import com.profy256.profy.platform.error.ResourceNotFoundException;
@@ -25,25 +26,27 @@ import java.util.UUID;
 @Service
 public class ProgressService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ProgressService.class);
+
     private final LessonProgressRepository lessonProgressRepository;
     private final QuizAttemptRepository quizAttemptRepository;
     private final BookmarkRepository bookmarkRepository;
-    private final CertificateRepository certificateRepository;
     private final LessonRepository lessonRepository;
     private final TaxonomyNodeRepository taxonomyNodeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProgressService(LessonProgressRepository lessonProgressRepository,
                            QuizAttemptRepository quizAttemptRepository,
                            BookmarkRepository bookmarkRepository,
-                           CertificateRepository certificateRepository,
                            LessonRepository lessonRepository,
-                           TaxonomyNodeRepository taxonomyNodeRepository) {
+                           TaxonomyNodeRepository taxonomyNodeRepository,
+                           ApplicationEventPublisher eventPublisher) {
         this.lessonProgressRepository = lessonProgressRepository;
         this.quizAttemptRepository = quizAttemptRepository;
         this.bookmarkRepository = bookmarkRepository;
-        this.certificateRepository = certificateRepository;
         this.lessonRepository = lessonRepository;
         this.taxonomyNodeRepository = taxonomyNodeRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -63,7 +66,29 @@ public class ProgressService {
             progress.setCompletedAt(Instant.now());
         }
 
-        return lessonProgressRepository.save(progress);
+        LessonProgress saved = lessonProgressRepository.save(progress);
+
+        // Announce the change; credential issuance (and anything else derived
+        // from progress) subscribes instead of being wired in here. Published
+        // AFTER_COMMIT by listeners, so a failure downstream never rolls this back.
+        if ("completed".equals(status)) {
+            eventPublisher.publishEvent(new CourseProgressUpdatedEvent(
+                    userId, lesson.getNodeId(), progressPercent(userId, lesson.getNodeId()), status));
+        }
+        return saved;
+    }
+
+    /** Percentage of published lessons of a course the user has completed. */
+    private int progressPercent(UUID userId, UUID courseNodeId) {
+        List<Lesson> lessons = lessonRepository.findByStatusAndNodeId("published", courseNodeId);
+        if (lessons.isEmpty()) return 0;
+        int completed = 0;
+        for (Lesson l : lessons) {
+            LessonProgress p = lessonProgressRepository.findByUserIdAndLessonId(userId, l.getId())
+                    .orElse(null);
+            if (p != null && "completed".equals(p.getStatus())) completed++;
+        }
+        return (int) Math.round(completed * 100.0 / lessons.size());
     }
 
     @Transactional(readOnly = true)

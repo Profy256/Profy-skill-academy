@@ -11,6 +11,11 @@ A mobile learning platform for practical, applied skills — starting with Techn
 - **Curated Video Lessons** — Admin-curated videos always take priority; lessons without one are auto-filled from YouTube search (marked `auto`) until a curator replaces them
 - **AI Teacher** — Ask questions and get answers scoped to the current lesson
 - **Progress Tracking** — Save lessons, track course completion, view stats
+- **Certificates** — Course final test: free first attempt once a learner passes the progress
+  threshold, paid retake credit (Stripe / MarzPay), server-side grading, verifiable credential at
+  `/verify/{code}` with PDF + QR download
+- **Markdown Blog** — Admin-authored posts rendered (and sanitised) server-side at `/blog`, wired
+  into the sitemap, RSS feed and `llms.txt` for SEO/GEO
 - **Freemium Model** — Free tier with ads, Premium ad-free experience
 - **Cross-Platform** — Mobile app, consumer web app, and admin panel
 
@@ -38,7 +43,9 @@ profy-skill-academy/
 │   ├── web/          # Next.js consumer web app
 │   └── admin/        # Next.js curator/admin panel
 ├── packages/         # Shared packages
+├── scripts/          # seed.sh + seed_content.sql (idempotent content seed)
 ├── docs/             # Documentation
+├── .github/workflows/ # CI (ci.yml)
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -86,6 +93,23 @@ Copy `.env.example` to `.env` and configure:
 - `STRIPE_WEBHOOK_SECRET` — Stripe webhook verification
 - `REVENUECAT_WEBHOOK_AUTH` — RevenueCat webhook auth
 - `YOUTUBE_API_KEY` — YouTube Data API v3 key for automatic video curation (optional; unset = curated-only)
+- `RESEND_API_KEY` / `RESEND_FROM` — certificate email delivery (optional; empty = logged no-op)
+- `SITE_URL` — public origin used in `/verify` links (defaults to `https://deraskul.com`)
+
+### Seed Data
+
+Demo content (categories, courses, lessons with full AI-Teacher fields, curated videos) is loaded
+by a psql script:
+
+```bash
+# DB must be up (docker compose up -d postgres), then:
+./scripts/seed.sh
+```
+
+- Optional `DATABASE_URL` (`postgres://` or `jdbc:postgresql://`); otherwise `PG*` env vars, else
+  compose defaults (`localhost:5434`, db/user/pass `profy`).
+- **Idempotent and additive — it never deletes.** Running it twice is a no-op the second time
+  (CI does exactly that in its `api-smoke` job).
 
 ---
 
@@ -240,6 +264,21 @@ http://localhost:8080/redoc
 ```
 
 OpenAPI spec is located at `backend/api/openapi.yaml`.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every `push` to `main` and every pull request (concurrency
+group per ref) — it is the merge gate, and it only checks quality: **nothing is pushed to a
+registry by CI** (image build/push is manual; see `deploy.md`).
+
+| Job | What it runs |
+|-----|--------------|
+| `backend` | `./mvnw -B test` (Java 17) |
+| `api-spec` | Redocly lint of `backend/api/openapi.yaml`, then `npm ci && npm run generate && npm run typecheck` in `packages/api-client` |
+| `web` | `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run build` in `apps/web` |
+| `admin` | `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run build` in `apps/admin` |
+| `api-smoke` | Boots the API against Postgres 16 + Redis 7, runs `./scripts/seed.sh` twice, then asserts seeded categories/lessons/primary video, `GET /api/v1/blog` → 200 and an unknown `/api/v1/verify/...` code → 404 |
+| `mobile` | `flutter analyze` + `flutter test` |
 
 ## License
 

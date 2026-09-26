@@ -80,7 +80,13 @@ profy:
   # ── AI Encryption (for DB-stored API keys) ─────────────────
   ai-encryption-key: ${PROFY_AI_ENCRYPTION_KEY:}
 
+  # ── Email (Resend) — certificate + notification delivery ─────
+  # Leave empty in dev: emails are logged and skipped, nothing breaks.
+  resend-api-key: ${RESEND_API_KEY:}
+  resend-from: "${RESEND_FROM:Dera Skul <onboarding@resend.dev>}"
+
   # ── Other ────────────────────────────────────────────────────
+  site-url: ${SITE_URL:https://deraskul.com}
   youtube-api-key: ${YOUTUBE_API_KEY:}
   cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   web-origin: ${WEB_ORIGIN:}

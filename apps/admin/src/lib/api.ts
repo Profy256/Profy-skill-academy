@@ -280,6 +280,60 @@ export const api = {
       request<CampusBookSyncResult>("/api/v1/admin/campus-books/sync", { method: "POST" }),
   },
 
+  blog: {
+    list: (params: { status?: string; page?: number; size?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status && params.status !== "all") qs.set("status", params.status);
+      if (params.page != null) qs.set("page", String(params.page));
+      if (params.size != null) qs.set("size", String(params.size));
+      const q = qs.toString();
+      return request<BlogPostPage>(`/api/v1/admin/blog${q ? `?${q}` : ""}`);
+    },
+    get: (id: string) =>
+      request<AdminBlogPost>(`/api/v1/admin/blog/${id}`),
+    create: (body: BlogPostInput) =>
+      request<AdminBlogPost>("/api/v1/admin/blog", { method: "POST", body }),
+    update: (id: string, body: BlogPostInput) =>
+      request<AdminBlogPost>(`/api/v1/admin/blog/${id}`, { method: "PUT", body }),
+    setStatus: (id: string, status: "draft" | "published" | "archived") =>
+      request<AdminBlogPost>(`/api/v1/admin/blog/${id}/status`, { method: "POST", body: { status } }),
+    remove: (id: string) =>
+      request<{ status: string }>(`/api/v1/admin/blog/${id}`, { method: "DELETE" }),
+  },
+
+  certificates: {
+    getSettings: () =>
+      request<CertificateSettings>("/api/v1/admin/certificates/settings"),
+    updateSettings: (body: CertificateSettingsInput) =>
+      request<CertificateSettings>("/api/v1/admin/certificates/settings", { method: "PUT", body }),
+    listDefinitions: () =>
+      request<CertificateDefinition[]>("/api/v1/admin/certificates/definitions"),
+    createDefinition: (body: CertificateDefinitionInput) =>
+      request<CertificateDefinition>("/api/v1/admin/certificates/definitions", { method: "POST", body }),
+    updateDefinition: (id: string, body: CertificateDefinitionInput) =>
+      request<CertificateDefinition>(`/api/v1/admin/certificates/definitions/${id}`, { method: "PUT", body }),
+    deleteDefinition: (id: string) =>
+      request<{ status: string }>(`/api/v1/admin/certificates/definitions/${id}`, { method: "DELETE" }),
+    issue: (id: string, body: { userEmail: string; recipientName?: string }) =>
+      request<IssuedCertificate>(`/api/v1/admin/certificates/definitions/${id}/issue`, { method: "POST", body }),
+    listIssued: (params: { status?: "active" | "all"; page?: number; size?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.status) qs.set("status", params.status);
+      if (params.page != null) qs.set("page", String(params.page));
+      if (params.size != null) qs.set("size", String(params.size));
+      const q = qs.toString();
+      return request<IssuedCertificatePage>(`/api/v1/admin/certificates/issued${q ? `?${q}` : ""}`);
+    },
+    revoke: (id: string) =>
+      request<IssuedCertificate>(`/api/v1/admin/certificates/issued/${id}/revoke`, { method: "POST" }),
+    reinstate: (id: string) =>
+      request<IssuedCertificate>(`/api/v1/admin/certificates/issued/${id}/reinstate`, { method: "POST" }),
+    getFinalTest: (courseId: string) =>
+      request<FinalTestAuthoring>(`/api/v1/admin/certificates/final-tests/${courseId}`),
+    saveFinalTest: (courseId: string, body: FinalTestInput) =>
+      request<FinalTestAuthoring>(`/api/v1/admin/certificates/final-tests/${courseId}`, { method: "PUT", body }),
+  },
+
   import: {
     youtube: (youtubeUrl: string, courseId: string) =>
       request<ImportYouTubeResponse>("/api/v1/admin/import/youtube", {
@@ -556,4 +610,146 @@ export interface CampusBookSyncResult {
   updated: number;
   removed: number;
   message: string;
+}
+
+export interface AdminBlogPost {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  contentMd: string;
+  coverImageUrl: string | null;
+  tags: string[];
+  metaTitle: string | null;
+  metaDescription: string | null;
+  status: "draft" | "published" | "archived";
+  readingTime?: string;
+  publishedAt: string | null;
+  updatedAt: string;
+  createdAt: string;
+  authorName: string | null;
+}
+
+export interface BlogPostInput {
+  slug?: string;
+  title: string;
+  excerpt?: string;
+  contentMd?: string;
+  coverImageUrl?: string;
+  tags?: string[];
+  metaTitle?: string;
+  metaDescription?: string;
+  status?: "draft" | "published" | "archived";
+}
+
+export interface BlogPostPage {
+  content: AdminBlogPost[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface CertificateSettings {
+  testPriceCents: number;
+  testPriceUgx: number;
+  freeAttemptProgressPercent: number;
+  defaultPassPercent: number;
+  testTitle: string;
+  testInstructions: string;
+  certHeading: string;
+  certIntro: string;
+  certAchieved: string;
+  certCourseLabel: string;
+  certScoreLabel: string;
+  certDateLabel: string;
+  certCodeLabel: string;
+  certSignatureName: string;
+  certSignatureTitle: string;
+  certFooter: string;
+  certOrgName: string;
+  certPrimaryColor: string;
+  certAccentColor: string;
+  certPaperSize: "landscape" | "portrait";
+  certShowQr: boolean;
+  certEnabled: boolean;
+  updatedAt: string;
+}
+
+export type CertificateSettingsInput = Partial<Omit<CertificateSettings, "updatedAt">>;
+
+export interface CertificateDefinition {
+  id: string;
+  name: string;
+  slug: string;
+  shortName: string | null;
+  description: string | null;
+  badgeColor: string | null;
+  courseId: string | null;
+  courseSlug: string | null;
+  courseName: string | null;
+  requireFinalTest: boolean;
+  requireCourseComplete: boolean;
+  passPercent: number;
+  minProgressPercent: number;
+  autoIssue: boolean;
+  certHeadingOverride: string | null;
+  certIntroOverride: string | null;
+  certAchievedOverride: string | null;
+  accentColorOverride: string | null;
+  isEnabled: boolean;
+  sortOrder: number;
+  issuedCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CertificateDefinitionInput = Partial<
+  Omit<
+    CertificateDefinition,
+    "id" | "slug" | "courseSlug" | "courseName" | "issuedCount" | "createdAt" | "updatedAt"
+  >
+> & { name: string; slug?: string; courseNodeId?: string };
+
+export interface IssuedCertificate {
+  id: string;
+  code: string;
+  verifyUrl: string;
+  recipientName: string;
+  userEmail: string | null;
+  courseName: string;
+  definitionName: string;
+  score: number | null;
+  total: number | null;
+  passPercent: number;
+  issuedAt: string;
+  revokedAt: string | null;
+  emailError: string | null;
+  revoked: boolean;
+}
+
+export interface IssuedCertificatePage {
+  content: IssuedCertificate[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface FinalTestQuestionInput {
+  question: string;
+  options: string[];
+  answerIndex: number;
+}
+
+export interface FinalTestInput {
+  questions: FinalTestQuestionInput[];
+  passPercent: number;
+}
+
+export interface FinalTestAuthoring {
+  courseId: string;
+  courseSlug: string;
+  passPercent: number;
+  questions: FinalTestQuestionInput[];
 }
