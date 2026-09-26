@@ -28,6 +28,7 @@ public class ProgressResponses {
 
     public record BookmarkResponse(
             UUID lessonId,
+            String lessonSlug,
             String lessonTitle,
             String courseSlug,
             String courseName,

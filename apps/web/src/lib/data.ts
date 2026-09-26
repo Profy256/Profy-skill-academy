@@ -1,11 +1,14 @@
-import { fetchTaxonomyTree, fetchCourse, fetchLesson, type ApiTaxonomyNode, type ApiCourse, type ApiLesson } from "./api";
+import { fetchTaxonomyTree, fetchCourse, fetchLesson, type ApiTaxonomyNode, type ApiLesson } from "./api";
 
 export interface LessonItem {
   id: string;
+  uuid?: string;
   title: string;
   duration: string;
   completed?: boolean;
   videoId: string;
+  level?: string;
+  description?: string;
 }
 
 export interface CourseItem {
@@ -95,20 +98,27 @@ export async function loadCategories(): Promise<CategoryItem[]> {
 export async function loadCourseDetail(slug: string): Promise<CourseItem | null> {
   try {
     const course = await fetchCourse(slug);
-    const lessons: LessonItem[] = course.lessons.map((l) => ({
-      id: l.slug,
-      title: l.title,
-      duration: "",
-      completed: false,
-      videoId: "",
-    }));
+    const lessons: LessonItem[] = course.lessons
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((l) => ({
+        id: l.slug,
+        uuid: l.id,
+        title: l.title,
+        duration: "",
+        completed: false,
+        videoId: "",
+        level: l.level || undefined,
+        description: undefined,
+      }));
+    const levels = Array.from(new Set(lessons.map((l) => l.level).filter(Boolean) as string[]));
     return {
       id: course.slug,
       title: course.name,
       instructor: "",
       duration: `${lessons.length} lessons`,
       lessons,
-      level: "",
+      level: levels.length === 1 ? levels[0] : "",
       description: course.description || "",
     };
   } catch {

@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,11 +33,13 @@ public class ProgressController {
             Authentication authentication) {
         UUID userId = UUID.fromString((String) authentication.getPrincipal());
         LessonProgress progress = progressService.updateProgress(userId, lessonId, request.status());
-        return ResponseEntity.ok(Map.of(
-                "status", progress.getStatus(),
-                "lessonId", progress.getLessonId(),
-                "completedAt", progress.getCompletedAt() != null ? progress.getCompletedAt().toString() : null
-        ));
+        // LinkedHashMap: Map.of rejects null values, and completedAt is null
+        // while a lesson is still in_progress.
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", progress.getStatus());
+        body.put("lessonId", progress.getLessonId());
+        body.put("completedAt", progress.getCompletedAt() != null ? progress.getCompletedAt().toString() : null);
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/progress/continue")

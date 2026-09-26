@@ -444,8 +444,19 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
+        "201":
           description: Bookmarked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lessonId:
+                    type: string
+                    format: uuid
+                  createdAt:
+                    type: string
+                    format: date-time
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -464,8 +475,15 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
+        "200":
           description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -2501,6 +2519,8 @@ components:
         lesson_id:
           type: string
           format: uuid
+        lesson_slug:
+          type: string
         lesson_title:
           type: string
         course_slug:

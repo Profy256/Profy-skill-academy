@@ -43,12 +43,58 @@ export interface ApiCourse {
   name: string;
   slug: string;
   description: string | null;
-  lessons: { id: string; title: string; slug: string; sortOrder: number }[];
+  lessons: { id: string; title: string; slug: string; level: string | null; sortOrder: number }[];
+}
+
+export interface ApiFeaturedCourse {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
 }
 
 export interface ApiFeaturedResponse {
-  featured: { id: string; name: string; slug: string; description: string }[];
-  categories: ApiTaxonomyNode[];
+  featuredCourses: ApiFeaturedCourse[];
+  categoryGrid: { id: string; name: string; slug: string; icon: string | null }[];
+}
+
+export interface ApiSearchResult {
+  id: string;
+  nodeId: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  level: string | null;
+  status: string;
+  sortOrder: number;
+}
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(status: number, message: string, code: string | null = null) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function isAuthError(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 403);
+}
+
+function errorCodeOf(body: unknown): string | null {
+  if (body && typeof body === "object") {
+    const b = body as { error?: unknown };
+    if (b.error && typeof b.error === "object") {
+      const code = (b.error as { code?: unknown }).code;
+      if (typeof code === "string") return code;
+    }
+  }
+  return null;
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -74,20 +120,34 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
       } catch {
         clearTokens();
         if (typeof window !== "undefined") window.location.reload();
-        throw new Error("Session expired");
+        throw new ApiError(401, "Session expired", "unauthorized");
       }
     } else {
       clearTokens();
       if (typeof window !== "undefined") window.location.reload();
-      throw new Error("Unauthorized");
+      throw new ApiError(401, "Unauthorized", "unauthorized");
+    }
+  }
+
+  const text = await res.text().catch(() => "");
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
     }
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(apiErrorMessage(err, `API ${res.status}: ${res.statusText}`));
+    throw new ApiError(
+      res.status,
+      apiErrorMessage(body, `API ${res.status}: ${res.statusText}`),
+      errorCodeOf(body)
+    );
   }
-  return res.json();
+  if (body === null) return undefined as T;
+  return body as T;
 }
 
 export async function fetchTaxonomyTree(): Promise<ApiTaxonomyNode[]> {
@@ -111,8 +171,100 @@ export async function fetchFeatured(): Promise<ApiFeaturedResponse> {
   return apiFetch("/api/v1/home/featured");
 }
 
-export async function searchContent(query: string): Promise<{ courses: ApiCourse[]; lessons: ApiLesson[] }> {
+export async function searchContent(query: string): Promise<{ query: string; results: ApiSearchResult[] }> {
   return apiFetch(`/api/v1/search?q=${encodeURIComponent(query)}`);
+}
+
+/* ── Learner progress, library & AI Teacher ──────────────────────────────── */
+
+export interface ProfileStats {
+  coursesCompleted: number;
+  lessonsCompleted: number;
+  lessonsInProgress: number;
+  bookmarksCount: number;
+  quizzesTaken: number;
+  avgQuizScore: number | null;
+}
+
+export function fetchProfileStats(): Promise<ProfileStats> {
+  return apiFetch("/api/v1/profile/stats");
+}
+
+export interface ContinueLesson {
+  id: string;
+  title: string;
+  slug: string;
+  level: string | null;
+  sortOrder: number;
+}
+
+export interface ContinueItem {
+  lesson: ContinueLesson;
+  courseSlug: string;
+  courseName: string;
+  status: string;
+  updatedAt: string;
+}
+
+export function fetchContinueLearning(): Promise<{ items: ContinueItem[] }> {
+  return apiFetch("/api/v1/progress/continue");
+}
+
+export function updateLessonProgress(lessonId: string, status: "in_progress" | "completed"): Promise<unknown> {
+  return apiFetch(`/api/v1/lessons/${encodeURIComponent(lessonId)}/progress`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export interface BookmarkInfo {
+  lessonId: string;
+  lessonSlug: string;
+  lessonTitle: string;
+  courseSlug: string;
+  courseName: string;
+  createdAt: string;
+}
+
+export function fetchBookmarks(): Promise<{ items: BookmarkInfo[] }> {
+  return apiFetch("/api/v1/library/bookmarks");
+}
+
+export function addBookmark(lessonId: string): Promise<unknown> {
+  return apiFetch(`/api/v1/library/bookmarks/${encodeURIComponent(lessonId)}`, { method: "POST" });
+}
+
+export function removeBookmark(lessonId: string): Promise<unknown> {
+  return apiFetch(`/api/v1/library/bookmarks/${encodeURIComponent(lessonId)}`, { method: "DELETE" });
+}
+
+export interface AiChatReply {
+  reply: string;
+}
+
+export interface AiChatMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+export function aiChat(lessonId: string, message: string): Promise<AiChatReply> {
+  return apiFetch(`/api/v1/lessons/${encodeURIComponent(lessonId)}/ai/chat`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
+  });
+}
+
+export function fetchAiMessages(lessonId: string): Promise<{ messages: AiChatMessage[] }> {
+  return apiFetch(`/api/v1/lessons/${encodeURIComponent(lessonId)}/ai/messages`);
+}
+
+export function recordQuizAttempt(lessonId: string, body: { score: number; total: number }): Promise<unknown> {
+  return apiFetch(`/api/v1/lessons/${encodeURIComponent(lessonId)}/quiz-attempts`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export interface ApiResource {

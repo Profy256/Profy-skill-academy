@@ -1345,6 +1345,7 @@ export interface components {
         Bookmark: {
             /** Format: uuid */
             lesson_id?: string;
+            lesson_slug?: string;
             lesson_title?: string;
             course_slug?: string;
             course_name?: string;
@@ -2388,11 +2389,18 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Bookmarked */
-            204: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        lessonId?: string;
+                        /** Format: date-time */
+                        createdAt?: string;
+                    };
+                };
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
@@ -2410,11 +2418,15 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Removed */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        message?: string;
+                    };
+                };
             };
             401: components["responses"]["Unauthorized"];
         };

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -64,6 +65,8 @@ public class ProgressService {
         progress.setStatus(status);
         if ("completed".equals(status)) {
             progress.setCompletedAt(Instant.now());
+        } else {
+            progress.setCompletedAt(null);
         }
 
         LessonProgress saved = lessonProgressRepository.save(progress);
@@ -121,9 +124,9 @@ public class ProgressService {
 
     @Transactional
     public Bookmark addBookmark(UUID userId, UUID lessonId) {
-        bookmarkRepository.findByUserIdAndLessonId(userId, lessonId).ifPresent(b -> {
-            throw new BadRequestException("lesson is already bookmarked");
-        });
+        // Idempotent per the API contract: saving twice keeps one bookmark.
+        Optional<Bookmark> existing = bookmarkRepository.findByUserIdAndLessonId(userId, lessonId);
+        if (existing.isPresent()) return existing.get();
 
         lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException("lesson not found"));
@@ -134,9 +137,8 @@ public class ProgressService {
 
     @Transactional
     public void removeBookmark(UUID userId, UUID lessonId) {
-        Bookmark bookmark = bookmarkRepository.findByUserIdAndLessonId(userId, lessonId)
-                .orElseThrow(() -> new ResourceNotFoundException("bookmark not found"));
-        bookmarkRepository.delete(bookmark);
+        bookmarkRepository.findByUserIdAndLessonId(userId, lessonId)
+                .ifPresent(bookmarkRepository::delete);
     }
 
     @Transactional(readOnly = true)
@@ -154,6 +156,7 @@ public class ProgressService {
 
             responses.add(new BookmarkResponse(
                     lesson.getId(),
+                    lesson.getSlug(),
                     lesson.getTitle(),
                     courseSlug,
                     courseName,

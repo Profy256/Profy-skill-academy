@@ -104,6 +104,33 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > `(cd backend && …)` in the smoke job, plus a psql guard step); rerun = **6/6 jobs green**
 > (`backend` · `api-spec` · `web` · `admin` · `api-smoke` · `mobile`).
 >
+> **Session note (2026-09-26, later):** M6 gap-fix — the learner SPA is wired to the real API.
+> Home: debounced `/search` results + `/home/featured` row + name-aware greeting (account name/email
+> stored locally at register/login — there is no `/auth/me` endpoint). Course screen loads
+> `/courses/{slug}` for the real lesson list (tree-mapped courses carry `lessons: []`). Lesson
+> screen: real `primaryVideo` → `youtube-nocookie.com/embed` iframe (neutral fallback when absent),
+> **Mark done → `PUT /lessons/{id}/progress`**, bookmark toggle → `POST/DELETE /library/bookmarks`,
+> "Check answers" → `POST /lessons/{id}/quiz-attempts`, notes persisted to localStorage. AI Teacher
+> screen: real `POST /ai/chat` + `GET …/ai/messages` history (404 = fresh session), signed-out →
+> sign-in prompt, `503 ai_unavailable`/429 → degraded banner. Library: `/progress/continue` +
+> `/library/bookmarks` with signed-out and empty states. Profile: `/profile/stats` tiles + wired
+> Log Out. `lib/api.ts` gained `ApiError` (status + `error.code`), empty-body/204 handling and the
+> new helpers; `ApiFeaturedResponse` fixed to the real `featuredCourses`/`categoryGrid` keys and
+> `searchContent` to the real `{query, results}` shape (both were wrong vs the implementation).
+> **Backend bugs fixed while wiring:** `PUT /lessons/{id}/progress` returned **500 on
+> `in_progress`** (`Map.of` rejects the null `completedAt` → `LinkedHashMap` + new
+> `ProgressControllerTest`); reopening a lesson now clears `completedAt`; bookmarks are truly
+> idempotent (201/200 no-op instead of 400/404 — the OpenAPI text already promised this); `Bookmark`
+> payloads gained `lessonSlug` (clients only get the lesson UUID, so saved lessons were unopenable);
+> OpenAPI bookmark POST/DELETE statuses aligned with the implementation and `packages/api-client`
+> regenerated. Verification: backend **113/113** (`ProgressServiceTest` added), web `tsc` clean +
+> **lint 0 problems** (was 10 warnings) + `build` green, admin unchanged (0 errors / 10 warnings),
+> `redocly lint` valid, live smoke of every wired endpoint green (403 guards, progress, continue,
+> idempotent bookmark cycle, stats, 503 AI, public reads).
+> **Discovered, not fixed:** `apps/mobile` parses API JSON as **snake_case** (`lesson_id`,
+> `bookmarks_count`, …) while the implementation returns camelCase → mobile continue/bookmarks/stats
+> screens will throw or zero-fill; the same snake_case-vs-camelCase drift remains in
+> `backend/api/openapi.yaml` response bodies.
 ---
 
 ## Milestone 0 — Project Scaffolding & Contracts
@@ -200,11 +227,14 @@ journey against the local API remains — blocked until M1 (auth) and M2 (conten
 - [x] Certificate tab (free-attempt/402/credit/result state machine, Stripe + MarzPay, issued list)
 - [x] Blog + credential verification + SEO/GEO routes (`/blog`, `/blog/[slug]`, `/verify/[code]`,
       `/rss.xml`, `/llms.txt`, `sitemap.ts`, JSON-LD/breadcrumbs/FAQ components)
-- [ ] **Real catalog data**: course/lesson/AI-chat screens still render mock data (`lib/data.ts`)
-      instead of `fetchTaxonomyTree` / `fetchCourse` / `fetchLesson` (those API helpers already exist
-      in `lib/api.ts` — wiring is the remaining work)
-- [ ] YouTube IFrame embed in the lesson screen (currently a placeholder poster image)
-- [ ] Progress writes (PUT progress / bookmarks) from the lesson + library screens
+- [x] **Real catalog data** — home search (`/search`, debounced) + featured row (`/home/featured`),
+      course screen → `loadCourseDetail`, lesson screen → `loadLessonDetail`, library →
+      `/progress/continue` + `/library/bookmarks`, profile → `/profile/stats`, AI chat →
+      `/lessons/{id}/ai/chat` + history (wired 2026-09-26; graceful signed-out / 503 / 429 states)
+- [x] YouTube IFrame embed in the lesson screen (`youtube-nocookie.com/embed/{videoId}` from the
+      lesson's `primaryVideo`, neutral fallback when no video is curated)
+- [x] Progress writes (PUT progress / bookmarks) from the lesson + library screens (+ quiz-attempt
+      recording, account name/email cached locally at register/login, Log Out wired)
 - [ ] AdSlot web analog (server-driven placement config)
 - [ ] Component/unit tests on critical flows (none configured; CI currently runs lint + tsc + build)
 
@@ -346,9 +376,9 @@ a second attempt requires a paid credit; blog posts authored in admin render as 
 | 1 — Auth | 🚧 Nearly done | register/login/refresh/logout, JWT audience separation, refresh rotation+revocation, bcrypt(12), `AuthServiceTest`/`AdminAuthServiceTest` green. Remaining: IP rate limits on auth endpoints |
 | 2 — Taxonomy & Content | ✅ Complete (2026-09-26) | Recursive tree, CRUD, draft invisibility, YouTube validation, search, featured, audit logging + **seed data** (13 subcategories, 4 courses, 12 lessons, 12 curated videos) |
 | 3 — AI Teacher | 🚧 Tests pending | LLMProvider (OpenAI/Anthropic/Gemini) + provider failover, circuit breaker, Redis rate limits, grounding prompt, session persistence, multi-turn history. Remaining: golden-file prompt tests |
-| 4 — Progress & Library | 🚧 Tests pending | Course completion derivation, continue-learning, bookmarks, quiz attempts, profile stats — all live. Remaining: service-layer tests (no `ProgressServiceTest` yet) |
+| 4 — Progress & Library | ✅ Tests added (2026-09-26) | Course completion derivation, continue-learning, bookmarks (idempotent + `lessonSlug`), quiz attempts, profile stats — all live. `ProgressServiceTest` (3) + `ProgressControllerTest` (2) cover the in_progress/`completedAt` and bookmark edge cases; 113/113 green |
 | 5 — Mobile App | ✅ Complete | Flutter app: all PRD §8 screens, bottom nav, AdSlot, AI degradation UI; **15/15 tests** incl. goldens (tolerant golden comparator added 2026-09-26) |
-| 6 — Consumer Web | 🚧 In progress | Next.js 16 learner SPA: auth, resources, certificate tab, blog + verify + SEO routes are live; **course/lesson/AI-chat screens still render mock data**, YouTube embed + AdSlot + tests pending (Vite re-scaffold plan dropped — see M6) |
+| 6 — Consumer Web | 🚧 In progress | Next.js 16 learner SPA: auth, resources, certificate tab, blog + verify + SEO routes live; **all learner screens wired to the real API (2026-09-26)** — search/featured, course detail, YouTube embed, progress + bookmarks + quiz attempts, AI chat + history, library, profile stats/logout. Remaining: AdSlot web analog, component tests (Vite re-scaffold plan dropped — see M6) |
 | 7 — Admin Web | 🚧 Nearly done | Next.js 16, admin auth, all managers wired to the API (taxonomy, lesson+video curation, review, blog, certificates, AI settings, resources, quick lesson). Remaining: audit-log viewer, editor tests |
 | 8 — Billing | 🚧 In progress | Test-credit purchases live (Stripe checkout, MarzPay polling, idempotent grant/consume, 402 gate). Remaining: subscriptions + entitlement endpoint, ad-serving keyed on entitlement, webhook tests |
 | 9 — Worker | 🚧 Infrastructure ready | Worker process runs the same JAR on `--spring.profiles.active=worker`; scheduling in place (`AutoCurationSweepJob` daily 03:00 UTC). Remaining: M9's oEmbed video-availability sweep (nothing writes `video_checks` yet) |

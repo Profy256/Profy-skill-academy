@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
-import { register as apiRegister, login as apiLogin, logout as apiLogout, getTokens, saveTokens } from "@/lib/auth";
+import { register as apiRegister, login as apiLogin, logout as apiLogout, getTokens, saveTokens, getProfile } from "@/lib/auth";
 
 type Screen =
   | "welcome"
@@ -31,18 +31,39 @@ interface NavState {
 
 import {
   loadCategories,
+  loadCourseDetail,
   loadLessonDetail,
   INTEREST_OPTIONS,
-  getCourse,
   type CategoryItem,
   type CourseItem,
   type LessonItem,
   type SubcategoryItem,
 } from "@/lib/data";
-import type { ApiLesson } from "@/lib/api";
-import { fetchResources, fetchMyCertificates } from "@/lib/api";
+import {
+  fetchResources,
+  fetchMyCertificates,
+  fetchFeatured,
+  searchContent,
+  fetchProfileStats,
+  updateLessonProgress,
+  fetchContinueLearning,
+  fetchBookmarks,
+  addBookmark,
+  removeBookmark,
+  aiChat,
+  fetchAiMessages,
+  recordQuizAttempt,
+  ApiError,
+  isAuthError,
+  type ApiLesson,
+  type ApiFeaturedCourse,
+  type ApiSearchResult,
+  type CertificateInfo,
+  type ProfileStats,
+  type ContinueItem,
+  type BookmarkInfo,
+} from "@/lib/api";
 import CertificateTab, { CertificateList } from "@/components/CertificateTab";
-import type { CertificateInfo } from "@/lib/api";
 
 const FG = "var(--foreground)";
 const FG_MUTED = "var(--muted-foreground)";
@@ -433,25 +454,66 @@ function InterestsScreen({ onContinue }: { onContinue: () => void }) {
   );
 }
 
-function HomeScreen({ onNav, onCategory }: { onNav: (s: Screen) => void; onCategory: (c: CategoryItem) => void }) {
+function HomeScreen({
+  onCategory,
+  onOpenCourse,
+  onOpenLesson,
+}: {
+  onCategory: (c: CategoryItem) => void;
+  onOpenCourse: (courseSlug: string) => void;
+  onOpenLesson: (lessonSlug: string) => void;
+}) {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [featured, setFeatured] = useState<ApiFeaturedCourse[]>([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ApiSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profile = getProfile();
+  const firstName = profile?.name ? profile.name.split(" ")[0] : null;
 
   useEffect(() => {
     loadCategories().then(setCategories).catch(console.error);
+    fetchFeatured()
+      .then((r) => setFeatured(r.featuredCourses))
+      .catch(console.error);
   }, []);
+
+  const onQueryChange = (value: string) => {
+    setQuery(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (value.trim().length < 2) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    searchTimer.current = setTimeout(() => {
+      searchContent(value.trim())
+        .then((r) => setResults(r.results))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+  };
+
+  const showResults = query.trim().length >= 2;
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       {/* Header */}
       <div className="px-6 pt-4 pb-3 flex-shrink-0 flex items-center justify-between" style={{ borderBottom: `1px solid ${BORDER}` }}>
         <div>
-          <div style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600, color: FG }}>Good morning, Kenji</div>
+          <div style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600, color: FG }}>
+            {firstName ? `Welcome back, ${firstName}` : "Welcome to Dera Skul"}
+          </div>
           <div style={{ fontSize: 14, color: FG_MUTED }}>Ready to keep learning?</div>
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle size={16} />
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: SECONDARY, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: ON_SECONDARY }}>K</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: ON_SECONDARY }}>
+              {(firstName || profile?.email || "?").charAt(0).toUpperCase()}
+            </span>
           </div>
         </div>
       </div>
@@ -460,12 +522,59 @@ function HomeScreen({ onNav, onCategory }: { onNav: (s: Screen) => void; onCateg
       <div className="px-6 py-3">
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: CARD, borderRadius: 10, padding: "12px 16px", border: `1px solid ${BORDER}`, maxWidth: 600 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
-          <span style={{ fontSize: 14, color: FG_MUTED }}>What do you want to learn?</span>
+          <input
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="What do you want to learn?"
+            style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: FG, minWidth: 0 }}
+          />
         </div>
+        {showResults && (
+          <div style={{ maxWidth: 600, marginTop: 8 }}>
+            {searching && results.length === 0 && (
+              <div style={{ fontSize: 13, color: FG_MUTED, padding: "8px 4px" }}>Searching…</div>
+            )}
+            {!searching && results.length === 0 && (
+              <div style={{ fontSize: 13, color: FG_MUTED, padding: "8px 4px" }}>No lessons match “{query.trim()}”.</div>
+            )}
+            {results.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => onOpenLesson(r.slug)}
+                style={{ display: "block", width: "100%", textAlign: "left", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "10px 14px", marginBottom: 6, cursor: "pointer" }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, color: FG }}>{r.title}</div>
+                {r.description && <div style={{ fontSize: 12, color: FG_MUTED, marginTop: 2 }}>{r.description}</div>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 pb-6">
+        {/* Featured courses */}
+        {featured.length > 0 && (
+          <div className="mb-6">
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 600, color: FG, marginBottom: 12 }}>Featured Courses</div>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+              {featured.map((course) => (
+                <button
+                  key={course.slug}
+                  onClick={() => onOpenCourse(course.slug)}
+                  style={{ display: "flex", flexDirection: "column", gap: 6, background: CARD, borderRadius: 10, padding: "16px 20px", border: `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left" }}
+                >
+                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: FG }}>{course.name}</div>
+                  {course.description && (
+                    <div style={{ fontSize: 13, color: FG_MUTED, lineHeight: 1.5 }}>{course.description}</div>
+                  )}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: PRIMARY, marginTop: 2 }}>View course →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Categories */}
         <div className="mb-6">
           <div style={{ fontFamily: "var(--font-serif)", fontSize: 18, fontWeight: 600, color: FG, marginBottom: 12 }}>Browse by Category</div>
@@ -578,18 +687,18 @@ function SubcategoryScreen({ category, subcategory, onBack, onCourse }: { catego
                 </div>
               )}
               <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600, color: FG, lineHeight: 1.3, marginBottom: 4 }}>{course.title}</div>
-                  {!isLanguageBranch && <div style={{ fontSize: 13, color: FG_MUTED, marginBottom: 6 }}>{course.instructor}</div>}
-                  <div style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.5 }}>{course.description}</div>
-                  <div className="flex items-center gap-3 mt-3">
-                    <span style={{ fontSize: 13, color: FG_MUTED }}>{course.duration}</span>
-                    <span style={{ color: BORDER }}>·</span>
-                    <span style={{ fontSize: 13, color: FG_MUTED }}>{course.lessons.length} lessons</span>
-                    <span style={{ color: BORDER }}>·</span>
-                    <span style={{ fontSize: 13, color: FG_MUTED }}>{course.level}</span>
+                  <div className="flex-1">
+                    <div style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600, color: FG, lineHeight: 1.3, marginBottom: 4 }}>{course.title}</div>
+                    {!isLanguageBranch && course.instructor && <div style={{ fontSize: 13, color: FG_MUTED, marginBottom: 6 }}>{course.instructor}</div>}
+                    <div style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.5 }}>{course.description}</div>
+                    <div className="flex items-center gap-3 mt-3">
+                      {course.duration && <span style={{ fontSize: 13, color: FG_MUTED }}>{course.duration}</span>}
+                      {course.duration && <span style={{ color: BORDER }}>·</span>}
+                      <span style={{ fontSize: 13, color: FG_MUTED }}>{course.lessons.length} lessons</span>
+                      {course.level && <span style={{ color: BORDER }}>·</span>}
+                      {course.level && <span style={{ fontSize: 13, color: FG_MUTED }}>{course.level}</span>}
+                    </div>
                   </div>
-                </div>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="2" style={{ flexShrink: 0, marginTop: 4 }}><path d="M9 18l6-6-6-6" /></svg>
               </div>
             </button>
@@ -600,21 +709,50 @@ function SubcategoryScreen({ category, subcategory, onBack, onCourse }: { catego
   );
 }
 
-function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack: () => void; onLesson: (l: LessonItem) => void }) {
+function CourseScreen({
+  course,
+  completedSlugs,
+  onBack,
+  onLesson,
+}: {
+  course: CourseItem;
+  completedSlugs: Set<string>;
+  onBack: () => void;
+  onLesson: (l: LessonItem) => void;
+}) {
   const [tab, setTab] = useState<"lessons" | "certificate">("lessons");
-  const completed = course.lessons.filter((l) => l.completed).length;
-  const pct = course.lessons.length > 0 ? Math.round((completed / course.lessons.length) * 100) : 0;
+  const [detail, setDetail] = useState<CourseItem | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    loadCourseDetail(course.id).then((d) => {
+      if (!active) return;
+      if (d) setDetail(d);
+      else setFailed(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [course.id]);
+
+  const current = detail ?? course;
+  const lessons = current.lessons.map((l) => ({ ...l, completed: completedSlugs.has(l.id) }));
+  const completed = lessons.filter((l) => l.completed).length;
+  const pct = lessons.length > 0 ? Math.round((completed / lessons.length) * 100) : 0;
+  const meta = [current.instructor, current.level].filter(Boolean).join(" · ");
+
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       <div className="px-6 pt-4 pb-4 flex-shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
         <BackButton onBack={onBack} />
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600, color: FG, marginTop: 12, lineHeight: 1.3 }}>{course.title}</h1>
-        <p style={{ fontSize: 14, color: FG_MUTED, marginTop: 4 }}>{course.instructor} · {course.level}</p>
-        <p style={{ fontSize: 14, color: FG_MUTED, marginTop: 4, lineHeight: 1.5 }}>{course.description}</p>
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600, color: FG, marginTop: 12, lineHeight: 1.3 }}>{current.title}</h1>
+        {meta && <p style={{ fontSize: 14, color: FG_MUTED, marginTop: 4 }}>{meta}</p>}
+        <p style={{ fontSize: 14, color: FG_MUTED, marginTop: 4, lineHeight: 1.5 }}>{current.description}</p>
         {completed > 0 && (
           <div className="mt-4" style={{ maxWidth: 500 }}>
             <div className="flex justify-between mb-1">
-              <span style={{ fontSize: 13, color: FG_MUTED }}>{completed} of {course.lessons.length} complete</span>
+              <span style={{ fontSize: 13, color: FG_MUTED }}>{completed} of {lessons.length} complete</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: PRIMARY }}>{pct}%</span>
             </div>
             <div style={{ background: BORDER, borderRadius: 4, height: 5 }}><div style={{ width: `${pct}%`, height: "100%", background: PRIMARY, borderRadius: 4 }} /></div>
@@ -643,13 +781,23 @@ function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack
       </div>
       {tab === "certificate" && (
         <div className="flex-1 overflow-y-auto px-6" style={{ maxWidth: 720, paddingTop: 16 }}>
-          <CertificateTab courseSlug={course.id} />
+          <CertificateTab courseSlug={current.id} />
         </div>
       )}
       {tab === "lessons" && (
       <div className="flex-1 overflow-y-auto px-6" style={{ maxWidth: 720 }}>
-        <div style={{ padding: "16px 0 4px", fontSize: 11, fontWeight: 700, color: FG_MUTED, letterSpacing: 1.2, textTransform: "uppercase" }}>{course.lessons.length} Lessons</div>
-        {course.lessons.map((lesson, idx) => (
+        <div style={{ padding: "16px 0 4px", fontSize: 11, fontWeight: 700, color: FG_MUTED, letterSpacing: 1.2, textTransform: "uppercase" }}>
+          {detail ? `${lessons.length} Lessons` : "Lessons"}
+        </div>
+        {!detail && !failed && (
+          <div style={{ padding: "16px 0", fontSize: 14, color: FG_MUTED }}>Loading lessons…</div>
+        )}
+        {failed && (
+          <div style={{ padding: "16px 0", fontSize: 14, color: FG_MUTED }}>
+            We couldn&apos;t load the lesson list for this course. Please go back and try again.
+          </div>
+        )}
+        {lessons.map((lesson, idx) => (
           <div key={lesson.id}>
             <button
               onClick={() => onLesson(lesson)}
@@ -671,7 +819,9 @@ function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack
               </div>
               <div className="flex-1">
                 <div style={{ fontSize: 15, fontWeight: 600, color: FG, lineHeight: 1.3 }}>{lesson.title}</div>
-                <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 1 }}>{lesson.duration}</div>
+                <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 1 }}>
+                  {[lesson.duration, lesson.level].filter(Boolean).join(" · ")}
+                </div>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
             </button>
@@ -684,10 +834,61 @@ function CourseScreen({ course, onBack, onLesson }: { course: CourseItem; onBack
   );
 }
 
-function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem; course: CourseItem; onBack: () => void; onAiChat: () => void }) {
+function NotesTab({ lessonId }: { lessonId: string }) {
+  const storageKey = `notes.${lessonId}`;
+  const [notes, setNotes] = useState(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return localStorage.getItem(storageKey) || "";
+    } catch {
+      return "";
+    }
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(storageKey, notes);
+      } catch {
+        // Storage unavailable (private mode) — notes stay in memory.
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [notes, storageKey]);
+
+  return (
+    <div>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Add your notes for this lesson…"
+        style={{ width: "100%", minHeight: 160, padding: "14px 16px", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: FG, lineHeight: 1.6, resize: "none", outline: "none" }}
+      />
+      <p style={{ fontSize: 13, color: FG_MUTED, marginTop: 8 }}>Notes are saved locally on this device.</p>
+    </div>
+  );
+}
+
+function LessonScreen({
+  lesson,
+  course,
+  onBack,
+  onAiChat,
+  onProgressChange,
+}: {
+  lesson: LessonItem;
+  course?: CourseItem;
+  onBack: () => void;
+  onAiChat: () => void;
+  onProgressChange: (lessonSlug: string, completed: boolean) => void;
+}) {
   const [activeTab, setActiveTab] = useState<"steps" | "tools" | "examples" | "notes" | "quiz">("steps");
   const [completed, setCompleted] = useState(lesson.completed);
   const [apiLesson, setApiLesson] = useState<ApiLesson | null>(null);
+  const [lessonFailed, setLessonFailed] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   // Keyed by lesson id so switching lessons starts a fresh quiz without an
   // effect (and without re-answering when you come back to a graded one).
   const [quizAnswersByLesson, setQuizAnswersByLesson] = useState<Record<string, Record<number, number>>>({});
@@ -708,7 +909,17 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
   const tabs = [{ id: "steps", label: "Steps" }, { id: "tools", label: "Tools" }, { id: "examples", label: "Examples" }, { id: "notes", label: "Notes" }, { id: "quiz", label: "Quiz" }] as const;
 
   useEffect(() => {
-    loadLessonDetail(lesson.id).then(setApiLesson).catch(console.error);
+    loadLessonDetail(lesson.id).then((detail) => {
+      setApiLesson(detail);
+      if (!detail) {
+        setLessonFailed(true);
+        return;
+      }
+      if (!getTokens()) return;
+      fetchBookmarks()
+        .then((r) => setBookmarked(r.items.some((b) => b.lessonId === detail.id)))
+        .catch(() => undefined);
+    });
   }, [lesson.id]);
 
   const objectives = apiLesson?.objectives || [];
@@ -716,14 +927,66 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
   const exercises = apiLesson?.exercises || [];
   const quizzes = apiLesson?.quizzes || [];
   const explanation = apiLesson?.explanation || "";
+  const videoId = apiLesson?.primaryVideo?.youtubeVideoId || null;
+
+  const toggleDone = () => {
+    if (!apiLesson || saving) return;
+    if (!getTokens()) {
+      setNotice("Sign in to track your progress.");
+      return;
+    }
+    const next = !completed;
+    setSaving(true);
+    setNotice(null);
+    updateLessonProgress(apiLesson.id, next ? "completed" : "in_progress")
+      .then(() => {
+        setCompleted(next);
+        onProgressChange(lesson.id, next);
+      })
+      .catch((err) => {
+        if (isAuthError(err)) setNotice("Sign in to track your progress.");
+        else setNotice("We couldn't save your progress. Please try again.");
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const toggleBookmark = () => {
+    if (!apiLesson || saving) return;
+    if (!getTokens()) {
+      setNotice("Sign in to save lessons to your library.");
+      return;
+    }
+    const next = !bookmarked;
+    setBookmarked(next);
+    setNotice(null);
+    (next ? addBookmark(apiLesson.id) : removeBookmark(apiLesson.id)).catch((err) => {
+      setBookmarked(!next);
+      if (isAuthError(err)) setNotice("Sign in to save lessons to your library.");
+      else setNotice("We couldn't update your bookmark. Please try again.");
+    });
+  };
+
+  const checkQuiz = () => {
+    setQuizChecked(true);
+    if (!apiLesson || !getTokens()) return;
+    const score = quizzes.filter((quiz, qi) => quizAnswers[qi] === quiz.correctIndex).length;
+    recordQuizAttempt(apiLesson.id, { score, total: quizzes.length }).catch(() => undefined);
+  };
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       <div className="px-6 pt-4 pb-3 flex-shrink-0 flex items-center gap-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
         <BackButton onBack={onBack} />
         <div className="flex-1" />
-        <button style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>
+        <button
+          onClick={toggleBookmark}
+          aria-pressed={bookmarked}
+          title={bookmarked ? "Remove from saved" : "Save lesson"}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill={bookmarked ? PRIMARY : "none"} stroke={bookmarked ? PRIMARY : FG_MUTED} strokeWidth="1.8">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+          </svg>
         </button>
       </div>
 
@@ -731,34 +994,54 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
         <div className="max-w-3xl mx-auto px-6 py-6">
           {/* Video */}
           <div style={{ background: "var(--code-bg)", borderRadius: 12, overflow: "hidden", marginBottom: 20 }}>
-            <div style={{ aspectRatio: "16/9", position: "relative" }}>
-              <img src="https://images.unsplash.com/photo-1587620962725-abab7fe55159?w=800&h=450&fit=crop&auto=format" alt="Lesson video" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.5 }} />
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ width: 64, height: 64, borderRadius: "50%", background: SURFACE, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill={FG}><polygon points="5 3 19 12 5 21 5 3" /></svg>
-                </div>
+            {videoId ? (
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${videoId}`}
+                title={apiLesson?.primaryVideo?.title || lesson.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                style={{ width: "100%", aspectRatio: "16/9", border: 0, display: "block" }}
+              />
+            ) : (
+              <div style={{ aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="1.5">
+                  <rect x="2" y="4" width="20" height="16" rx="3" />
+                  <path d="M10 9l5 3-5 3z" fill={FG_MUTED} stroke="none" />
+                </svg>
+                <span style={{ fontSize: 13, color: FG_MUTED }}>
+                  {apiLesson ? "No video for this lesson yet" : "Loading lesson…"}
+                </span>
               </div>
-              <div style={{ position: "absolute", bottom: 10, right: 10, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "3px 8px" }}>
-                <span style={{ fontSize: 11, color: "#fff", fontWeight: 600 }}>YouTube</span>
-              </div>
-            </div>
-            <div style={{ height: 3, background: "var(--bezel-2)" }}><div style={{ width: "35%", height: "100%", background: PRIMARY }} /></div>
+            )}
           </div>
 
           {/* Title + complete */}
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex-1">
-              <div style={{ fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600, color: FG, lineHeight: 1.3 }}>{lesson.title}</div>
-              <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 4 }}>{course.title} · {lesson.duration}</div>
+              <div style={{ fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 600, color: FG, lineHeight: 1.3 }}>
+                {apiLesson?.title || lesson.title}
+              </div>
+              <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 4 }}>
+                {[course?.title, apiLesson?.level || lesson.level].filter(Boolean).join(" · ")}
+              </div>
             </div>
             <button
-              onClick={() => setCompleted((c) => !c)}
-              style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 8, background: completed ? PRIMARY : "transparent", border: completed ? "none" : `1.5px solid ${BORDER}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+              onClick={toggleDone}
+              disabled={!apiLesson || saving}
+              style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 8, background: completed ? PRIMARY : "transparent", border: completed ? "none" : `1.5px solid ${BORDER}`, cursor: apiLesson && !saving ? "pointer" : "default", opacity: apiLesson ? 1 : 0.6, display: "flex", alignItems: "center", gap: 6 }}
             >
               {completed ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ON_PRIMARY} strokeWidth="2.5"><path d="M5 13l4 4L19 7" /></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="2"><circle cx="12" cy="12" r="10" /></svg>}
               <span style={{ fontSize: 13, fontWeight: 700, color: completed ? ON_PRIMARY : FG_MUTED }}>{completed ? "Done" : "Mark done"}</span>
             </button>
           </div>
+          {notice && (
+            <div style={{ fontSize: 13, color: "var(--danger, #be5050)", marginBottom: 16 }}>{notice}</div>
+          )}
+          {lessonFailed && !apiLesson && (
+            <div style={{ fontSize: 14, color: FG_MUTED, marginBottom: 16 }}>
+              This lesson couldn&apos;t be loaded from the server. Please go back and try again.
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex gap-0 mb-6" style={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -831,12 +1114,7 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
                 )}
               </div>
             )}
-            {activeTab === "notes" && (
-              <div>
-                <textarea placeholder="Add your notes for this lesson…" style={{ width: "100%", minHeight: 160, padding: "14px 16px", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: FG, lineHeight: 1.6, resize: "none", outline: "none" }} />
-                <p style={{ fontSize: 13, color: FG_MUTED, marginTop: 8 }}>Notes are saved locally.</p>
-              </div>
-            )}
+            {activeTab === "notes" && <NotesTab lessonId={lesson.id} />}
             {activeTab === "quiz" && (
               <div className="flex flex-col gap-3">
                 {quizzes.length > 0 ? (
@@ -886,7 +1164,7 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
                     {!quizChecked ? (
                       <button
                         disabled={quizzes.some((_, qi) => quizAnswers[qi] === undefined)}
-                        onClick={() => setQuizChecked(true)}
+                        onClick={checkQuiz}
                         style={{
                           padding: "13px 0",
                           borderRadius: 10,
@@ -937,23 +1215,68 @@ function LessonScreen({ lesson, course, onBack, onAiChat }: { lesson: LessonItem
   );
 }
 
-function AiChatScreen({ lesson, onBack }: { lesson: LessonItem; onBack: () => void }) {
-  const [messages, setMessages] = useState([
+function AiChatScreen({ lesson, onBack, onSignIn }: { lesson: LessonItem; onBack: () => void; onSignIn: () => void }) {
+  const [messages, setMessages] = useState<{ role: "ai" | "user"; text: string }[]>([
     { role: "ai", text: `Hi! I'm here to help you with "${lesson.title}". What's giving you trouble?` },
   ]);
+  const [apiLessonId, setApiLessonId] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<{ kind: "signin" | "unavailable" | "error"; text: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    loadLessonDetail(lesson.id).then((detail) => {
+      if (!detail) {
+        setLoading(false);
+        setNotice({ kind: "error", text: "This lesson couldn't be loaded, so the AI Teacher is unavailable right now." });
+        return;
+      }
+      setApiLessonId(detail.id);
+      if (!getTokens()) {
+        setLoading(false);
+        setNotice({ kind: "signin", text: "Sign in to chat with the AI Teacher about this lesson." });
+        return;
+      }
+      fetchAiMessages(detail.id)
+        .then((history) => {
+          if (history.messages.length > 0) {
+            setMessages(
+              history.messages.map((m) => ({ role: m.role === "user" ? "user" : "ai", text: m.content }))
+            );
+          }
+        })
+        .catch((err) => {
+          if (isAuthError(err)) setNotice({ kind: "signin", text: "Sign in to chat with the AI Teacher about this lesson." });
+        })
+        .finally(() => setLoading(false));
+    });
+  }, [lesson.id]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, pending]);
+
   const send = () => {
-    if (!input.trim()) return;
-    const userMsg = input.trim();
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: userMsg },
-      { role: "ai", text: "Great question! Let me help you understand that concept. Based on the lesson content, here's what you need to know..." },
-    ]);
+    const text = input.trim();
+    if (!text || pending || !apiLessonId) return;
     setInput("");
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    setNotice(null);
+    setMessages((prev) => [...prev, { role: "user", text }]);
+    setPending(true);
+    aiChat(apiLessonId, text)
+      .then((r) => setMessages((prev) => [...prev, { role: "ai", text: r.reply }]))
+      .catch((err) => {
+        if (err instanceof ApiError && (err.status === 503 || err.code === "ai_unavailable")) {
+          setNotice({ kind: "unavailable", text: "AI Teacher is temporarily unavailable. Your lesson content still works — try again in a moment." });
+        } else if (isAuthError(err)) {
+          setNotice({ kind: "signin", text: "Sign in to chat with the AI Teacher." });
+        } else {
+          setNotice({ kind: "error", text: err instanceof Error ? err.message : "Your message couldn't be sent. Please try again." });
+        }
+      })
+      .finally(() => setPending(false));
   };
 
   return (
@@ -971,11 +1294,14 @@ function AiChatScreen({ lesson, onBack }: { lesson: LessonItem; onBack: () => vo
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, padding: "6px 12px", background: CARD, borderRadius: 8, border: `1px solid ${BORDER}`, width: "fit-content" }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-          <span style={{ fontSize: 12, color: FG_MUTED }}>Answers based on: <strong style={{ color: FG }}>Defining routes and handlers</strong></span>
+          <span style={{ fontSize: 12, color: FG_MUTED }}>Answers based on: <strong style={{ color: FG }}>{lesson.title}</strong></span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4" style={{ maxWidth: 720, margin: "0 auto", width: "100%" }}>
+        {loading && (
+          <div style={{ fontSize: 14, color: FG_MUTED }}>Loading conversation…</div>
+        )}
         {messages.map((msg, i) => (
           <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
             {msg.role === "ai" && (
@@ -984,17 +1310,34 @@ function AiChatScreen({ lesson, onBack }: { lesson: LessonItem; onBack: () => vo
               </div>
             )}
             <div style={{ maxWidth: "75%", padding: "12px 16px", borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px", background: msg.role === "user" ? PRIMARY : CARD, border: msg.role === "ai" ? `1px solid ${BORDER}` : "none" }}>
-              <p style={{ fontSize: 14, color: msg.role === "user" ? ON_PRIMARY : FG, lineHeight: 1.6, margin: 0 }}>{msg.text}</p>
+              <p style={{ fontSize: 14, color: msg.role === "user" ? ON_PRIMARY : FG, lineHeight: 1.6, margin: 0, whiteSpace: "pre-wrap" }}>{msg.text}</p>
             </div>
           </div>
         ))}
+        {pending && (
+          <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div style={{ maxWidth: "75%", padding: "12px 16px", borderRadius: "14px 14px 14px 4px", background: CARD, border: `1px solid ${BORDER}` }}>
+              <p style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>AI Teacher is thinking…</p>
+            </div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
       <div className="flex-shrink-0 px-6 pb-5 pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+        {notice && (
+          <div style={{ maxWidth: 720, margin: "0 auto 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 14px", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+            <span style={{ fontSize: 13, color: FG, lineHeight: 1.5 }}>{notice.text}</span>
+            {notice.kind === "signin" && (
+              <button onClick={onSignIn} style={{ padding: "7px 16px", borderRadius: 8, background: PRIMARY, color: ON_PRIMARY, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                Sign in
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex gap-2 items-end" style={{ maxWidth: 720, margin: "0 auto" }}>
           <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask about this lesson…" rows={1} style={{ flex: 1, padding: "12px 16px", background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, fontSize: 14, color: FG, lineHeight: 1.5, outline: "none", resize: "none" }} />
-          <button onClick={send} style={{ width: 44, height: 44, borderRadius: 10, background: input.trim() ? PRIMARY : BORDER, border: "none", cursor: input.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <button onClick={send} disabled={!input.trim() || pending || !apiLessonId} style={{ width: 44, height: 44, borderRadius: 10, background: input.trim() && apiLessonId && !pending ? PRIMARY : BORDER, border: "none", cursor: input.trim() && apiLessonId && !pending ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={ON_PRIMARY} strokeWidth="2.2"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
           </button>
         </div>
@@ -1003,12 +1346,33 @@ function AiChatScreen({ lesson, onBack }: { lesson: LessonItem; onBack: () => vo
   );
 }
 
-function LibraryScreen({ onLesson, onNav }: { onLesson: () => void; onNav: (s: "home" | "learn" | "library" | "profile") => void }) {
+function LibraryScreen({
+  onOpenLesson,
+  onSignIn,
+}: {
+  onOpenLesson: (lessonSlug: string, courseSlug?: string, courseName?: string) => void;
+  onSignIn: () => void;
+}) {
   const [tab, setTab] = useState<"inprogress" | "saved">("inprogress");
-  const inProgress = [
-    { title: "English for Beginners", pct: 67, nextLesson: "Shopping and everyday situations", lessons: "2/3" },
-    { title: "Spanish from Zero", pct: 25, nextLesson: "Verbs: ser vs estar", lessons: "1/2" },
-  ];
+  const [continueItems, setContinueItems] = useState<ContinueItem[] | null>(null);
+  const [bookmarks, setBookmarks] = useState<BookmarkInfo[] | null>(null);
+  const [signedOut, setSignedOut] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    Promise.all([fetchContinueLearning(), fetchBookmarks()])
+      .then(([cont, saved]) => {
+        setContinueItems(cont.items);
+        setBookmarks(saved.items);
+      })
+      .catch((err) => {
+        if (isAuthError(err)) setSignedOut(true);
+        else setFailed(true);
+      });
+  }, []);
+
+  const loading = continueItems === null && bookmarks === null && !signedOut && !failed;
+
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
       <div className="px-6 pt-4 pb-4 flex-shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
@@ -1022,40 +1386,70 @@ function LibraryScreen({ onLesson, onNav }: { onLesson: () => void; onNav: (s: "
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-6 pt-4" style={{ maxWidth: 720 }}>
-        {tab === "inprogress" && (
-          <div className="flex flex-col gap-3">
-            {inProgress.map((course, i) => (
-              <div key={i}>
-                <div style={{ background: CARD, borderRadius: 10, border: `1px solid ${BORDER}`, padding: "16px 20px" }}>
-                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: FG, marginBottom: 4 }}>{course.title}</div>
-                  <div style={{ fontSize: 13, color: FG_MUTED, marginBottom: 10 }}>{course.lessons} lessons complete</div>
-                  <div style={{ background: BORDER, borderRadius: 4, height: 5, marginBottom: 10 }}><div style={{ width: `${course.pct}%`, height: "100%", background: PRIMARY, borderRadius: 4 }} /></div>
-                  <div className="flex items-center justify-between">
-                    <div style={{ fontSize: 13, color: FG_MUTED }}>Up next: <span style={{ color: FG, fontWeight: 600 }}>{course.nextLesson}</span></div>
-                    <button onClick={onLesson} style={{ padding: "8px 18px", background: PRIMARY, color: ON_PRIMARY, border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Continue</button>
-                  </div>
-                </div>
-                {i === 0 && <div className="my-3"><AdBanner /></div>}
-              </div>
-            ))}
+        {signedOut && (
+          <div style={{ background: CARD, borderRadius: 10, border: `1px solid ${BORDER}`, padding: "24px 20px", textAlign: "center" }}>
+            <div style={{ fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 600, color: FG, marginBottom: 6 }}>Your library lives in your account</div>
+            <p style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.6, marginBottom: 16 }}>
+              Sign in to pick up where you left off and keep saved lessons across devices.
+            </p>
+            <button onClick={onSignIn} style={{ padding: "10px 24px", background: PRIMARY, color: ON_PRIMARY, border: "none", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 700 }}>
+              Sign in
+            </button>
           </div>
         )}
-        {tab === "saved" && (
+        {failed && (
+          <div style={{ fontSize: 14, color: FG_MUTED }}>Your library couldn&apos;t be loaded right now. Please try again shortly.</div>
+        )}
+        {loading && <div style={{ fontSize: 14, color: FG_MUTED }}>Loading your library…</div>}
+
+        {!signedOut && !failed && tab === "inprogress" && (
           <div className="flex flex-col gap-3">
-            {[
-              { id: "eb3", title: "Shopping and everyday situations", course: "English for Beginners", duration: "22m" },
-              { id: "sp1", title: "Basic greetings and phrases", course: "Spanish from Zero", duration: "16m" },
-              { id: "sp2", title: "Verbs: ser vs estar", course: "Spanish from Zero", duration: "24m" },
-            ].map((lesson) => (
-              <button key={lesson.id} onClick={onLesson} style={{ display: "flex", alignItems: "center", gap: 12, background: CARD, borderRadius: 10, padding: "14px 18px", border: `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left" }}>
+            {(continueItems ?? []).map((item) => (
+              <div key={item.lesson.id} style={{ background: CARD, borderRadius: 10, border: `1px solid ${BORDER}`, padding: "16px 20px" }}>
+                <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, fontWeight: 600, color: FG, marginBottom: 4 }}>{item.courseName}</div>
+                <div style={{ fontSize: 14, color: FG, marginBottom: 4 }}>{item.lesson.title}</div>
+                <div style={{ fontSize: 13, color: FG_MUTED, marginBottom: 10 }}>
+                  {item.status === "completed" ? "Completed" : "In progress"} · {new Date(item.updatedAt).toLocaleDateString()}
+                </div>
+                <div className="flex items-center justify-end">
+                  <button
+                    onClick={() => onOpenLesson(item.lesson.slug, item.courseSlug, item.courseName)}
+                    style={{ padding: "8px 18px", background: PRIMARY, color: ON_PRIMARY, border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}
+                  >
+                    {item.status === "completed" ? "Review" : "Continue"}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {continueItems !== null && continueItems.length === 0 && (
+              <div style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.6 }}>
+                Nothing in progress yet. Open a lesson and mark it as started — it will show up here.
+              </div>
+            )}
+          </div>
+        )}
+
+        {!signedOut && !failed && tab === "saved" && (
+          <div className="flex flex-col gap-3">
+            {(bookmarks ?? []).map((bm) => (
+              <button
+                key={bm.lessonId}
+                onClick={() => onOpenLesson(bm.lessonSlug, bm.courseSlug, bm.courseName)}
+                style={{ display: "flex", alignItems: "center", gap: 12, background: CARD, borderRadius: 10, padding: "14px 18px", border: `1px solid ${BORDER}`, cursor: "pointer", textAlign: "left" }}
+              >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill={PRIMARY} stroke={PRIMARY} strokeWidth="1.5"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" /></svg>
                 <div className="flex-1">
-                  <div style={{ fontSize: 15, fontWeight: 600, color: FG }}>{lesson.title}</div>
-                  <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 1 }}>{lesson.course} · {lesson.duration}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: FG }}>{bm.lessonTitle}</div>
+                  <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 1 }}>{bm.courseName}</div>
                 </div>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={FG_MUTED} strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
               </button>
             ))}
+            {bookmarks !== null && bookmarks.length === 0 && (
+              <div style={{ fontSize: 14, color: FG_MUTED, lineHeight: 1.6 }}>
+                No saved lessons yet. Tap the bookmark icon on any lesson to keep it here.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1063,16 +1457,28 @@ function LibraryScreen({ onLesson, onNav }: { onLesson: () => void; onNav: (s: "
   );
 }
 
-function ProfileScreen({ onSubscription, onNav }: { onSubscription: () => void; onNav: (s: "home" | "learn" | "library" | "profile") => void }) {
-  const stats = [{ label: "Lessons Done", value: "14" }, { label: "Hours Learned", value: "6.2" }, { label: "Courses Started", value: "3" }];
-  // null = not resolved yet (signed-out visitors simply resolve to []).
+function ProfileScreen({ onSubscription, onLogout }: { onSubscription: () => void; onLogout: () => void }) {
+  // null = still loading / signed-out visitors resolve to null.
+  const [stats, setStats] = useState<ProfileStats | null>(null);
   const [certificates, setCertificates] = useState<CertificateInfo[] | null>(null);
+  const profile = getProfile();
+  const displayName = profile?.name || profile?.email || "Your account";
+  const initial = (profile?.name || profile?.email || "?").charAt(0).toUpperCase();
 
   useEffect(() => {
+    fetchProfileStats()
+      .then((s) => setStats(s))
+      .catch(() => setStats(null));
     fetchMyCertificates()
       .then((list) => setCertificates(list))
       .catch(() => setCertificates([]));
   }, []);
+
+  const tiles = [
+    { label: "Lessons Done", value: stats ? String(stats.lessonsCompleted) : "—" },
+    { label: "Courses Done", value: stats ? String(stats.coursesCompleted) : "—" },
+    { label: "Quizzes Taken", value: stats ? String(stats.quizzesTaken) : "—" },
+  ];
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--background)" }}>
@@ -1080,11 +1486,11 @@ function ProfileScreen({ onSubscription, onNav }: { onSubscription: () => void; 
         <div className="pt-6 pb-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
           <div className="flex items-center gap-4">
             <div style={{ width: 64, height: 64, borderRadius: "50%", background: SECONDARY, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: 24, fontWeight: 700, color: ON_SECONDARY }}>K</span>
+              <span style={{ fontSize: 24, fontWeight: 700, color: ON_SECONDARY }}>{initial}</span>
             </div>
             <div>
-              <div style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600, color: FG }}>Kenji Watanabe</div>
-              <div style={{ fontSize: 14, color: FG_MUTED }}>kenji@email.com</div>
+              <div style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 600, color: FG }}>{displayName}</div>
+              {profile?.email && profile.name && <div style={{ fontSize: 14, color: FG_MUTED }}>{profile.email}</div>}
               <div style={{ marginTop: 4, display: "inline-flex", alignItems: "center", gap: 5, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "3px 10px" }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill={FG_MUTED}><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" /></svg>
                 <span style={{ fontSize: 12, fontWeight: 600, color: FG_MUTED }}>Free plan</span>
@@ -1095,13 +1501,21 @@ function ProfileScreen({ onSubscription, onNav }: { onSubscription: () => void; 
         <div className="py-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: FG_MUTED, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 12 }}>Your progress</div>
           <div className="flex gap-4">
-            {stats.map((stat) => (
+            {tiles.map((stat) => (
               <div key={stat.label} style={{ flex: 1, background: CARD, borderRadius: 10, padding: "16px 12px", border: `1px solid ${BORDER}`, textAlign: "center" }}>
                 <div style={{ fontFamily: "var(--font-serif)", fontSize: 24, fontWeight: 600, color: PRIMARY }}>{stat.value}</div>
                 <div style={{ fontSize: 12, color: FG_MUTED, marginTop: 4 }}>{stat.label}</div>
               </div>
             ))}
           </div>
+          {stats && stats.quizzesTaken > 0 && stats.avgQuizScore !== null && (
+            <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 10 }}>
+              Average quiz score: <strong style={{ color: FG }}>{Math.round(stats.avgQuizScore * 100)}%</strong>
+            </div>
+          )}
+          {stats === null && (
+            <div style={{ fontSize: 13, color: FG_MUTED, marginTop: 10 }}>Sign in to sync your progress across devices.</div>
+          )}
         </div>
         <div className="py-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: FG_MUTED, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 12 }}>Credentials</div>
@@ -1135,7 +1549,7 @@ function ProfileScreen({ onSubscription, onNav }: { onSubscription: () => void; 
           ))}
         </div>
         <div className="pb-6">
-          <button style={{ width: "100%", padding: "14px 0", background: "transparent", border: `1.5px solid ${BORDER}`, borderRadius: 10, cursor: "pointer", fontSize: 14, fontWeight: 600, color: FG_MUTED }}>Log Out</button>
+          <button onClick={onLogout} style={{ width: "100%", padding: "14px 0", background: "transparent", border: `1.5px solid ${BORDER}`, borderRadius: 10, cursor: "pointer", fontSize: 14, fontWeight: 600, color: FG_MUTED }}>Log Out</button>
         </div>
       </div>
     </div>
@@ -1419,7 +1833,7 @@ function LoginScreen({ onLogin, onBack }: { onLogin: () => void; onBack: () => v
 /* ────────────────────────────────────────────────────────────────────────────
    Resources screen — browse & read PDFs, download gated by admin settings
    ──────────────────────────────────────────────────────────────────────────── */
-function ResourcesScreen({ isPremium, onBack }: { isPremium: boolean; onBack: () => void }) {
+function ResourcesScreen({ onBack }: { onBack: () => void }) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [previewRes, setPreviewRes] = useState<{ id: string; title: string; fileName: string; category: string; pageFlip: boolean; allowDownload: boolean } | null>(null);
@@ -1611,6 +2025,7 @@ export default function App() {
   }));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [completedSlugs, setCompletedSlugs] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     loadCategories().then(setCategories).catch(console.error);
@@ -1620,12 +2035,46 @@ export default function App() {
 
   const handleLogout = async () => {
     await apiLogout();
+    setCompletedSlugs(new Set());
     setNav({ screen: "welcome" });
+  };
+
+  const markProgress = (lessonSlug: string, done: boolean) => {
+    setCompletedSlugs((prev) => {
+      const next = new Set(prev);
+      if (done) next.add(lessonSlug);
+      else next.delete(lessonSlug);
+      return next;
+    });
+  };
+
+  const openCourse = (courseSlug: string) => {
+    loadCourseDetail(courseSlug).then((detail) => {
+      if (detail) go("course", { course: detail, subcategory: undefined });
+    });
+  };
+
+  const openLesson = (lessonSlug: string, courseSlug?: string, courseName?: string) => {
+    const placeholder: LessonItem = { id: lessonSlug, title: lessonSlug.replace(/-/g, " "), duration: "", videoId: "" };
+    if (!courseSlug) {
+      go("lesson", { lesson: placeholder, course: undefined, subcategory: undefined });
+      return;
+    }
+    loadCourseDetail(courseSlug).then((detail) => {
+      go("lesson", {
+        lesson: placeholder,
+        subcategory: undefined,
+        course: detail ?? (courseName ? { id: courseSlug, title: courseName, instructor: "", duration: "", lessons: [], level: "", description: "" } : undefined),
+      });
+    });
   };
 
   const handleBottomNav = (tab: "home" | "learn" | "library" | "profile" | "resources") => {
     if (tab === "home") go("home");
-    else if (tab === "learn") go("category", { category: categories[0] });
+    else if (tab === "learn") {
+      if (categories.length > 0) go("category", { category: categories[0] });
+      else loadCategories().then((cats) => { if (cats.length > 0) go("category", { category: cats[0] }); else go("home"); });
+    }
     else if (tab === "library") go("library");
     else if (tab === "profile") go("profile");
     else if (tab === "resources") go("resources");
@@ -1644,23 +2093,40 @@ export default function App() {
       case "interests":
         return <InterestsScreen onContinue={() => go("home")} />;
       case "home":
-        return <HomeScreen onNav={go} onCategory={(cat) => go("category", { category: cat })} />;
+        return (
+          <HomeScreen
+            onCategory={(cat) => go("category", { category: cat })}
+            onOpenCourse={openCourse}
+            onOpenLesson={(slug) => openLesson(slug)}
+          />
+        );
       case "category":
         return nav.category ? <CategoryScreen category={nav.category} onBack={() => go("home")} onSubcategory={(sub) => go("subcategory", { subcategory: sub })} /> : null;
       case "subcategory":
         return nav.category && nav.subcategory ? <SubcategoryScreen category={nav.category} subcategory={nav.subcategory} onBack={() => go("category")} onCourse={(course) => go("course", { course })} /> : null;
       case "course":
-        return nav.course ? <CourseScreen course={nav.course} onBack={() => go("subcategory")} onLesson={(lesson) => go("lesson", { lesson })} /> : null;
+        return nav.course ? <CourseScreen course={nav.course} completedSlugs={completedSlugs} onBack={() => go(nav.subcategory ? "subcategory" : "home")} onLesson={(lesson) => go("lesson", { lesson })} /> : null;
       case "lesson":
-        return nav.lesson ? <LessonScreen lesson={nav.lesson} course={nav.course!} onBack={() => go(nav.course ? "course" : "home")} onAiChat={() => go("ai-chat")} /> : null;
+        return nav.lesson ? (
+          <LessonScreen
+            key={nav.lesson.id}
+            lesson={nav.lesson}
+            course={nav.course}
+            onBack={() => go(nav.course ? "course" : "home")}
+            onAiChat={() => go("ai-chat")}
+            onProgressChange={markProgress}
+          />
+        ) : null;
       case "ai-chat":
-        return nav.lesson ? <AiChatScreen lesson={nav.lesson} onBack={() => go("lesson")} /> : null;
+        return nav.lesson ? (
+          <AiChatScreen key={nav.lesson.id} lesson={nav.lesson} onBack={() => go("lesson")} onSignIn={() => go("login")} />
+        ) : null;
       case "library":
-        return <LibraryScreen onLesson={() => go("lesson")} onNav={handleBottomNav} />;
+        return <LibraryScreen onOpenLesson={openLesson} onSignIn={() => go("login")} />;
       case "resources":
-        return <ResourcesScreen isPremium={false} onBack={() => go("home")} />;
+        return <ResourcesScreen onBack={() => go("home")} />;
       case "profile":
-        return <ProfileScreen onSubscription={() => go("subscription")} onNav={handleBottomNav} />;
+        return <ProfileScreen onSubscription={() => go("subscription")} onLogout={handleLogout} />;
       case "subscription":
         return <SubscriptionScreen onBack={() => go("profile")} />;
       default:

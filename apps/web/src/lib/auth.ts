@@ -1,9 +1,15 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8082";
 const STORAGE_KEY = "auth.token_pair.v1";
+const PROFILE_KEY = "auth.profile.v1";
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+}
+
+export interface StoredProfile {
+  email: string;
+  name?: string;
 }
 
 let currentTokens: TokenPair | null = null;
@@ -28,6 +34,32 @@ export function saveTokens(pair: TokenPair) {
 export function clearTokens() {
   currentTokens = null;
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(PROFILE_KEY);
+}
+
+/** The auth API only returns token pairs, so the account details we know
+ *  (what the user typed at register/login) are kept next to the session. */
+export function saveProfile(email: string, name?: string) {
+  if (typeof window === "undefined") return;
+  const previous = getProfile();
+  const profile: StoredProfile = {
+    email,
+    name: name || (previous && previous.email === email ? previous.name : undefined),
+  };
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+}
+
+export function getProfile(): StoredProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredProfile;
+    return parsed && typeof parsed.email === "string" ? parsed : null;
+  } catch {
+    localStorage.removeItem(PROFILE_KEY);
+    return null;
+  }
 }
 
 export function getAccessToken(): string | null {
@@ -61,6 +93,7 @@ export async function register(
     const err = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(apiErrorMessage(err, `Registration failed (${res.status})`));
   }
+  saveProfile(email, name);
   return res.json();
 }
 
@@ -77,6 +110,7 @@ export async function login(
     const err = await res.json().catch(() => ({ message: res.statusText }));
     throw new Error(apiErrorMessage(err, `Login failed (${res.status})`));
   }
+  saveProfile(email);
   return res.json();
 }
 
