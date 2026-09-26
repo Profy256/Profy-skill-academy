@@ -25,6 +25,7 @@ jobs:
           cache: maven
       - name: Unit tests
         run: ./mvnw -B test
+        working-directory: backend
 
   api-spec:
     name: OpenAPI contract + generated client
@@ -126,6 +127,8 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
+      - name: Ensure psql client (used by scripts/seed.sh)
+        run: command -v psql >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
       - name: Boot, seed and assert
         env:
           DATABASE_URL: jdbc:postgresql://localhost:5432/profy
@@ -137,7 +140,8 @@ jobs:
           PORT: 8080
         run: |
           set -euo pipefail
-          nohup ./mvnw -B spring-boot:run > api.log 2>&1 &
+          # mvnw lives in backend/ — start it from there, keep api.log at the repo root
+          (cd backend && nohup ./mvnw -B spring-boot:run > ../api.log 2>&1 &)
           echo "Waiting for the API to migrate and start…"
           for i in $(seq 1 90); do
             if curl -sf http://localhost:8080/healthz > /dev/null; then
