@@ -1,5 +1,7 @@
 # Dera Skul
 
+[![CI](https://github.com/Profy256/Profy-skill-academy/actions/workflows/ci.yml/badge.svg)](https://github.com/Profy256/Profy-skill-academy/actions/workflows/ci.yml)
+
 **Learn Anything. Anytime. Anywhere.**
 
 A mobile learning platform for practical, applied skills — starting with Technology, Business & Finance, and Languages. Features curated video lessons with an AI Teacher available inside every lesson to answer questions in real time.

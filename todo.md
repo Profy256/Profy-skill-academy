@@ -99,7 +99,10 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 > service-boundary question resolved, stack corrected Go→Java/Next.js, roadmap/open questions updated),
 > `docs/TECHNICAL_DOC.md` (Go/Vite/`cmd/worker` leftovers → Spring worker profile + Next.js, new §9.1 CI
 > + §9.2 seed), `deploy.md` (standalone Node servers, not Vite static bundles; missing env rows),
-> `README.md` (CI + Seed Data sections).
+> `README.md` (CI + Seed Data sections). (7) **CI verified on GitHub** — first run failed only
+> because `./mvnw` lives in `backend/`, not the repo root (fixed: `working-directory: backend` +
+> `(cd backend && …)` in the smoke job, plus a psql guard step); rerun = **6/6 jobs green**
+> (`backend` · `api-spec` · `web` · `admin` · `api-smoke` · `mobile`).
 >
 ---
 
@@ -122,7 +125,7 @@ next milestone until the current one's DoD passes. Update checkboxes as you go.
 
 **DoD:** `docker-compose up` → `GET /healthz` returns 200; CI green on empty scaffold; OpenAPI lint passes.
 **Status:** ✅ **Complete (2026-09-26)** — OpenAPI lint valid · Spring Boot scaffold + platform layer
-· TS client generates/typechecks · CI workflow verified job-by-job locally · seed verified twice
+· TS client generates/typechecks · **CI green on GitHub: 6/6 jobs** on `main` · seed verified twice
 against a fresh DB (migrations V1–V20).
 
 ## Milestone 1 — Auth (consumer + admin)
@@ -339,7 +342,7 @@ a second attempt requires a paid credit; blog posts authored in admin render as 
 
 | Milestone | Status | Notes |
 |---|---|---|
-| 0 — Scaffolding & Contracts | ✅ Complete (2026-09-26) | Monorepo, Spring Boot platform layer, OpenAPI 3.1 (redocly valid), TS client generate+typecheck, **6-job CI** (`.github/workflows/ci.yml`, verified job-by-job locally), **idempotent seed** (`scripts/seed.sh`), compose stack |
+| 0 — Scaffolding & Contracts | ✅ Complete (2026-09-26) | Monorepo, Spring Boot platform layer, OpenAPI 3.1 (redocly valid), TS client generate+typecheck, **6-job CI green on GitHub** (`.github/workflows/ci.yml`), **idempotent seed** (`scripts/seed.sh`), compose stack |
 | 1 — Auth | 🚧 Nearly done | register/login/refresh/logout, JWT audience separation, refresh rotation+revocation, bcrypt(12), `AuthServiceTest`/`AdminAuthServiceTest` green. Remaining: IP rate limits on auth endpoints |
 | 2 — Taxonomy & Content | ✅ Complete (2026-09-26) | Recursive tree, CRUD, draft invisibility, YouTube validation, search, featured, audit logging + **seed data** (13 subcategories, 4 courses, 12 lessons, 12 curated videos) |
 | 3 — AI Teacher | 🚧 Tests pending | LLMProvider (OpenAI/Anthropic/Gemini) + provider failover, circuit breaker, Redis rate limits, grounding prompt, session persistence, multi-turn history. Remaining: golden-file prompt tests |
